@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stolen Moments</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0d0d12;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+        margin: 0 auto;
+        outline: none;
+      }
+      #loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #b9c0d4;
+        font: 16px/1.4 system-ui, sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading">Loading…</div>
+    <!-- Relative path is required: GitHub Pages serves from /<repo>/ -->
+    <script type="module">
+      import init from "./game-time.js";
+      init().then(() => {
+        document.getElementById("loading")?.remove();
+      });
+    </script>
+  </body>
+</html>
