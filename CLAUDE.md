@@ -73,9 +73,8 @@ If you add code that legitimately trips a pedantic lint, prefer a scoped
 After completing a coherent round of changes — and once the clippy Stop-gate
 passes (warning-clean) — create a commit with a concise, descriptive message
 summarising the change. A "round" is a self-contained unit of work, not every
-turn; don't commit a half-finished or non-compiling tree. When starting from
-`main`, branch first rather than committing directly. Source work stays on
-`main`/feature branches; never commit to the `gh-pages` deploy branch.
+turn; don't commit a half-finished or non-compiling tree. Committing directly to
+`main` is fine. Never commit to the `gh-pages` deploy branch.
 
 ## Bevy 0.18 + edition 2024 gotchas
 

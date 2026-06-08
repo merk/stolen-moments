@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 
+use crate::camera::CameraTarget;
 use crate::dungeon::{DungeonMap, SpawnPoint};
 
 const MOVE_SPEED: f32 = 5.0;
@@ -33,6 +34,7 @@ fn spawn_player(mut commands: Commands, asset_server: Res<AssetServer>, spawn: R
         SceneRoot(scene),
         Transform::from_translation(spawn.world),
         Player,
+        CameraTarget,
         Name::new("Player"),
     ));
 }

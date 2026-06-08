@@ -1,9 +1,7 @@
-//! Isometric orthographic camera that smoothly follows the player.
+//! Isometric orthographic camera that smoothly follows its target.
 
 use bevy::camera::ScalingMode;
 use bevy::prelude::*;
-
-use crate::player::Player;
 
 /// Offset of the camera from its follow target. The (equal X/Z, larger Y)
 /// vector gives the classic 3/4 isometric viewing angle.
@@ -18,12 +16,19 @@ const FOLLOW_SPEED: f32 = 6.0;
 #[derive(Component)]
 pub struct IsoCamera;
 
+/// Marker for the entity the camera should follow. Whichever module owns the
+/// focal entity (the player today) adds this; the camera stays decoupled from it.
+/// Following needs a position, so a `Transform` is required.
+#[derive(Component)]
+#[require(Transform)]
+pub struct CameraTarget;
+
 pub struct IsoCameraPlugin;
 
 impl Plugin for IsoCameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_camera)
-            .add_systems(Update, follow_player);
+            .add_systems(Update, follow_target);
     }
 }
 
@@ -41,12 +46,12 @@ fn spawn_camera(mut commands: Commands) {
     ));
 }
 
-fn follow_player(
+fn follow_target(
     time: Res<Time>,
-    player: Query<&Transform, (With<Player>, Without<IsoCamera>)>,
+    target: Query<&Transform, (With<CameraTarget>, Without<IsoCamera>)>,
     mut camera: Query<&mut Transform, With<IsoCamera>>,
 ) {
-    let Ok(player) = player.single() else {
+    let Ok(target) = target.single() else {
         return;
     };
     let Ok(mut cam) = camera.single_mut() else {
@@ -55,7 +60,7 @@ fn follow_player(
 
     // Only translate to follow — the rotation stays fixed at the iso angle set
     // on spawn. Re-aiming each frame while the position lerps causes wobble.
-    let target = player.translation + CAMERA_OFFSET;
+    let target = target.translation + CAMERA_OFFSET;
     let t = (FOLLOW_SPEED * time.delta_secs()).min(1.0);
     cam.translation = cam.translation.lerp(target, t);
 }
