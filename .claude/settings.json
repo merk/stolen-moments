@@ -14,6 +14,15 @@
       "Bash(rustfmt --version)",
       "Bash(rustup show:*)",
       "Bash(./build-web.sh)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git fetch:*)",
+      "Bash(git stash list:*)",
       "Read(//Users/tim/.cargo/registry/src/**)"
     ]
   },
