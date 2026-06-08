@@ -1,3 +1,4 @@
+mod adversary;
 mod camera;
 mod coins;
 mod dungeon;
@@ -34,6 +35,7 @@ fn main() {
             props::PropsPlugin,
             coins::CoinsPlugin,
             time_loop::TimeLoopPlugin,
+            adversary::AdversaryPlugin,
         ))
         .add_systems(Startup, spawn_lighting)
         .run();

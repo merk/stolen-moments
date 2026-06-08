@@ -56,6 +56,16 @@ pub struct Ghost {
     recording: Arc<Vec<Sample>>,
     /// Distinct per-loop colour used for both the ghost mesh and its trail.
     color: Color,
+    /// Which banked loop this ghost replays. Lower = older; the highest index is
+    /// the most recently recorded loop. Used to rank prey for adversaries.
+    loop_index: usize,
+}
+
+impl Ghost {
+    /// Age rank of this ghost: 0 is the oldest banked loop, higher is newer.
+    pub fn loop_index(&self) -> usize {
+        self.loop_index
+    }
 }
 
 /// Fired (globally) when a loop restarts, so other systems can reset their
@@ -112,7 +122,7 @@ fn start_new_loop(
     let scene = state.character.clone();
     for (index, recording) in state.banked.iter().enumerate() {
         let color = loop_color(index);
-        spawn_ghost(&mut commands, scene.clone(), recording.clone(), color, spawn.world);
+        spawn_ghost(&mut commands, scene.clone(), recording.clone(), color, index, spawn.world);
     }
 
     // Send the player back to the start.
@@ -139,13 +149,14 @@ fn spawn_ghost(
     scene: Handle<Scene>,
     recording: Arc<Vec<Sample>>,
     color: Color,
+    loop_index: usize,
     start: Vec3,
 ) {
     commands
         .spawn((
             SceneRoot(scene),
             Transform::from_translation(start),
-            Ghost { recording, color },
+            Ghost { recording, color, loop_index },
             Name::new("Ghost"),
         ))
         // Once the scene's meshes exist, swap their materials for transparent

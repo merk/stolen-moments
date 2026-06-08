@@ -3,32 +3,30 @@
 
 use bevy::prelude::*;
 use rand::rngs::SmallRng;
+use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 
 use crate::coins::{Coin, CoinScore};
 use crate::dungeon::{DungeonMap, SpawnPoint};
 
-/// Chance that any given eligible floor tile receives a prop.
-const PROP_DENSITY: f64 = 0.06;
-
 /// Don't place props within this tile radius of the player's spawn.
 const SPAWN_CLEARANCE: i32 = 2;
 
-/// A prop model and how often it should appear (relative weight).
+/// A prop model and exactly how many of it to scatter across the dungeon.
 struct PropKind {
     asset: &'static str,
-    weight: u32,
+    count: usize,
     /// Coins float and spin; everything else sits on the floor.
     coin: bool,
 }
 
 const PROPS: &[PropKind] = &[
-    PropKind { asset: "coin.glb", weight: 5, coin: true },
-    PropKind { asset: "barrel.glb", weight: 4, coin: false },
-    PropKind { asset: "rocks.glb", weight: 4, coin: false },
-    PropKind { asset: "stones.glb", weight: 3, coin: false },
-    PropKind { asset: "chest.glb", weight: 2, coin: false },
-    PropKind { asset: "column.glb", weight: 1, coin: false },
+    PropKind { asset: "coin.glb", count: 30, coin: true },
+    PropKind { asset: "barrel.glb", count: 16, coin: false },
+    PropKind { asset: "rocks.glb", count: 16, coin: false },
+    PropKind { asset: "stones.glb", count: 12, coin: false },
+    PropKind { asset: "chest.glb", count: 6, coin: false },
+    PropKind { asset: "column.glb", count: 4, coin: false },
 ];
 
 /// Marks a prop that should slowly spin in place (coins).
@@ -53,7 +51,6 @@ fn scatter_props(
     mut score: ResMut<CoinScore>,
 ) {
     let mut rng = SmallRng::from_entropy();
-    let total_weight: u32 = PROPS.iter().map(|p| p.weight).sum();
 
     // Preload each prop scene once and reuse the handle.
     let handles: Vec<Handle<Scene>> = PROPS
@@ -65,8 +62,10 @@ fn scatter_props(
         })
         .collect();
 
+    // Collect every eligible floor tile, then shuffle so we can hand out unique
+    // tiles to each prop type without ever stacking two props on one tile.
     let (sx, sy) = (spawn.tile.0 as i32, spawn.tile.1 as i32);
-
+    let mut tiles: Vec<(usize, usize)> = Vec::new();
     for y in 0..map.height {
         for x in 0..map.width {
             if !map.is_walkable(x, y) {
@@ -76,30 +75,28 @@ fn scatter_props(
             if (x as i32 - sx).abs() <= SPAWN_CLEARANCE && (y as i32 - sy).abs() <= SPAWN_CLEARANCE {
                 continue;
             }
-            if !rng.gen_bool(PROP_DENSITY) {
-                continue;
-            }
+            tiles.push((x, y));
+        }
+    }
+    tiles.shuffle(&mut rng);
+    let mut available = tiles.into_iter();
 
-            // Weighted pick of which prop to place.
-            let mut roll = rng.gen_range(0..total_weight);
-            let idx = PROPS
-                .iter()
-                .position(|p| {
-                    if roll < p.weight {
-                        true
-                    } else {
-                        roll -= p.weight;
-                        false
-                    }
-                })
-                .unwrap_or(0);
-            let kind = &PROPS[idx];
+    for (kind, handle) in PROPS.iter().zip(&handles) {
+        let mut placed = 0;
+        for _ in 0..kind.count {
+            let Some((x, y)) = available.next() else {
+                warn!(
+                    "Ran out of floor tiles placing props; {} got {placed}/{}",
+                    kind.asset, kind.count
+                );
+                break;
+            };
 
             let base = map.tile_to_world(x, y);
             let yaw = rng.gen_range(0.0..std::f32::consts::TAU);
 
             let mut entity = commands.spawn((
-                SceneRoot(handles[idx].clone()),
+                SceneRoot(handle.clone()),
                 Name::new(format!("{} ({x},{y})", kind.asset)),
             ));
 
@@ -112,10 +109,11 @@ fn scatter_props(
                 ));
                 score.total += 1;
             } else {
-                entity.insert(Transform::from_translation(base).with_rotation(
-                    Quat::from_rotation_y(yaw),
-                ));
+                entity.insert(
+                    Transform::from_translation(base).with_rotation(Quat::from_rotation_y(yaw)),
+                );
             }
+            placed += 1;
         }
     }
 }

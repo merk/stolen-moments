@@ -44,6 +44,11 @@ impl DungeonMap {
         self.get(x, y) == Tile::Floor
     }
 
+    /// Number of walkable floor tiles in the map.
+    pub fn floor_count(&self) -> usize {
+        self.tiles.iter().filter(|&&t| t == Tile::Floor).count()
+    }
+
     /// Convert tile coordinates to the world-space center of that tile.
     /// The grid is centred on the world origin and laid out on the XZ plane.
     pub fn tile_to_world(&self, x: usize, y: usize) -> Vec3 {
@@ -94,11 +99,18 @@ impl Plugin for DungeonPlugin {
 /// from the centre, store it as a resource, and spawn the tile meshes.
 fn generate_dungeon(mut commands: Commands, asset_server: Res<AssetServer>) {
     let seed: u32 = rand::random();
-    info!("Generating dungeon with seed {seed}");
 
     let mut map = build_noise_map(seed);
-    let spawn_tile = keep_central_region(&mut map);
+    // Join every disconnected cavern into one component instead of discarding
+    // the unreachable ones, so the whole carved map is usable in a single pass.
+    connect_regions(&mut map);
+    let spawn_tile = find_central_floor(&map);
     let spawn_world = map.tile_to_world(spawn_tile.0, spawn_tile.1);
+
+    info!(
+        "Generated dungeon with seed {seed}: {} floor tiles",
+        map.floor_count()
+    );
 
     spawn_tiles(&map, &mut commands, &asset_server);
 
@@ -132,35 +144,97 @@ fn build_noise_map(seed: u32) -> DungeonMap {
     }
 }
 
-/// Flood-fill from the most central floor tile and turn every floor tile that
-/// isn't reachable into a wall, guaranteeing a single connected dungeon.
-fn keep_central_region(map: &mut DungeonMap) -> (usize, usize) {
-    let start = find_central_floor(map);
+/// Carve corridors until every floor tile is part of one connected component.
+///
+/// We flood-fill to label all disconnected regions, seed the "connected" set
+/// with the largest, then repeatedly attach whichever remaining region has the
+/// closest pair of tiles to the connected set via an L-shaped tunnel.
+fn connect_regions(map: &mut DungeonMap) {
+    let mut regions = find_regions(map);
+    if regions.len() <= 1 {
+        return;
+    }
 
-    let mut reachable = vec![false; map.width * map.height];
-    let mut queue = VecDeque::new();
-    queue.push_back(start);
-    reachable[start.1 * map.width + start.0] = true;
+    // Seed the connected set with the largest region.
+    let largest = regions
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, r)| r.len())
+        .map(|(i, _)| i)
+        .expect("regions is non-empty");
+    let mut connected: Vec<(usize, usize)> = regions.swap_remove(largest);
 
-    while let Some((x, y)) = queue.pop_front() {
-        for (nx, ny) in neighbours(x, y, map.width, map.height) {
-            let idx = ny * map.width + nx;
-            if !reachable[idx] && map.is_walkable(nx, ny) {
-                reachable[idx] = true;
-                queue.push_back((nx, ny));
+    while !regions.is_empty() {
+        // Find the closest pair of tiles between any unconnected region and the
+        // connected set, then carve a corridor across that gap.
+        let mut best: Option<(usize, (usize, usize), (usize, usize), i32)> = None;
+        for (ri, region) in regions.iter().enumerate() {
+            for &(ax, ay) in &connected {
+                for &(bx, by) in region {
+                    let d = (ax as i32 - bx as i32).pow(2) + (ay as i32 - by as i32).pow(2);
+                    if best.map_or(true, |(.., bd)| d < bd) {
+                        best = Some((ri, (ax, ay), (bx, by), d));
+                    }
+                }
             }
         }
+
+        let (ri, from, to, _) = best.expect("at least one region remains");
+        carve_corridor(map, from, to);
+        // The freshly attached region (and the corridor endpoints) join the
+        // connected set so later regions can tunnel to either.
+        connected.append(&mut regions.swap_remove(ri));
     }
+}
+
+/// Flood-fill every walkable tile into its connected component.
+fn find_regions(map: &DungeonMap) -> Vec<Vec<(usize, usize)>> {
+    let mut visited = vec![false; map.width * map.height];
+    let mut regions = Vec::new();
 
     for y in 0..map.height {
         for x in 0..map.width {
-            if map.is_walkable(x, y) && !reachable[y * map.width + x] {
-                map.set(x, y, Tile::Wall);
+            if !map.is_walkable(x, y) || visited[y * map.width + x] {
+                continue;
             }
+
+            let mut region = Vec::new();
+            let mut queue = VecDeque::new();
+            queue.push_back((x, y));
+            visited[y * map.width + x] = true;
+
+            while let Some((cx, cy)) = queue.pop_front() {
+                region.push((cx, cy));
+                for (nx, ny) in neighbours(cx, cy, map.width, map.height) {
+                    let idx = ny * map.width + nx;
+                    if !visited[idx] && map.is_walkable(nx, ny) {
+                        visited[idx] = true;
+                        queue.push_back((nx, ny));
+                    }
+                }
+            }
+            regions.push(region);
         }
     }
 
-    start
+    regions
+}
+
+/// Carve a 1-wide L-shaped floor corridor from `from` to `to`: a horizontal
+/// leg then a vertical leg. Both endpoints are interior floor tiles, so the
+/// path never touches the forced solid border.
+fn carve_corridor(map: &mut DungeonMap, from: (usize, usize), to: (usize, usize)) {
+    let (mut x, y0) = from;
+    while x != to.0 {
+        map.set(x, y0, Tile::Floor);
+        x = if x < to.0 { x + 1 } else { x - 1 };
+    }
+    let mut y = y0;
+    while y != to.1 {
+        map.set(to.0, y, Tile::Floor);
+        y = if y < to.1 { y + 1 } else { y - 1 };
+    }
+    map.set(to.0, to.1, Tile::Floor);
 }
 
 /// Find the walkable tile closest to the grid centre (a good spawn point).
