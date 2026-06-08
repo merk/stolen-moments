@@ -172,7 +172,7 @@ fn connect_regions(map: &mut DungeonMap) {
             for &(ax, ay) in &connected {
                 for &(bx, by) in region {
                     let d = (ax as i32 - bx as i32).pow(2) + (ay as i32 - by as i32).pow(2);
-                    if best.map_or(true, |(.., bd)| d < bd) {
+                    if best.is_none_or(|(.., bd)| d < bd) {
                         best = Some((ri, (ax, ay), (bx, by), d));
                     }
                 }

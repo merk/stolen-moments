@@ -21,12 +21,36 @@ struct PropKind {
 }
 
 const PROPS: &[PropKind] = &[
-    PropKind { asset: "coin.glb", count: 30, coin: true },
-    PropKind { asset: "barrel.glb", count: 16, coin: false },
-    PropKind { asset: "rocks.glb", count: 16, coin: false },
-    PropKind { asset: "stones.glb", count: 12, coin: false },
-    PropKind { asset: "chest.glb", count: 6, coin: false },
-    PropKind { asset: "column.glb", count: 4, coin: false },
+    PropKind {
+        asset: "coin.glb",
+        count: 30,
+        coin: true,
+    },
+    PropKind {
+        asset: "barrel.glb",
+        count: 16,
+        coin: false,
+    },
+    PropKind {
+        asset: "rocks.glb",
+        count: 16,
+        coin: false,
+    },
+    PropKind {
+        asset: "stones.glb",
+        count: 12,
+        coin: false,
+    },
+    PropKind {
+        asset: "chest.glb",
+        count: 6,
+        coin: false,
+    },
+    PropKind {
+        asset: "column.glb",
+        count: 4,
+        coin: false,
+    },
 ];
 
 /// Marks a prop that should slowly spin in place (coins).
@@ -56,9 +80,8 @@ fn scatter_props(
     let handles: Vec<Handle<Scene>> = PROPS
         .iter()
         .map(|p| {
-            asset_server.load(
-                GltfAssetLabel::Scene(0).from_asset(format!("Models/GLB format/{}", p.asset)),
-            )
+            asset_server
+                .load(GltfAssetLabel::Scene(0).from_asset(format!("Models/GLB format/{}", p.asset)))
         })
         .collect();
 
@@ -72,7 +95,8 @@ fn scatter_props(
                 continue;
             }
             // Keep the spawn area clear so the player isn't boxed in.
-            if (x as i32 - sx).abs() <= SPAWN_CLEARANCE && (y as i32 - sy).abs() <= SPAWN_CLEARANCE {
+            if (x as i32 - sx).abs() <= SPAWN_CLEARANCE && (y as i32 - sy).abs() <= SPAWN_CLEARANCE
+            {
                 continue;
             }
             tiles.push((x, y));
@@ -82,8 +106,7 @@ fn scatter_props(
     let mut available = tiles.into_iter();
 
     for (kind, handle) in PROPS.iter().zip(&handles) {
-        let mut placed = 0;
-        for _ in 0..kind.count {
+        for (placed, _) in (0..kind.count).enumerate() {
             let Some((x, y)) = available.next() else {
                 warn!(
                     "Ran out of floor tiles placing props; {} got {placed}/{}",
@@ -113,7 +136,6 @@ fn scatter_props(
                     Transform::from_translation(base).with_rotation(Quat::from_rotation_y(yaw)),
                 );
             }
-            placed += 1;
         }
     }
 }

@@ -1,7 +1,7 @@
 //! Isometric orthographic camera that smoothly follows the player.
 
-use bevy::prelude::*;
 use bevy::camera::ScalingMode;
+use bevy::prelude::*;
 
 use crate::player::Player;
 

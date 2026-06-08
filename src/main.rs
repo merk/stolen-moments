@@ -1,3 +1,7 @@
+// Bevy queries and spatial-search tuples are inherently shaped types; clippy's
+// type-complexity lint fights the framework more than it helps here.
+#![allow(clippy::type_complexity)]
+
 mod adversary;
 mod camera;
 mod coins;
@@ -15,7 +19,7 @@ fn main() {
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
-                        title: "Game Time — Noise Dungeon".into(),
+                        title: "Stolen Moments".into(),
                         ..default()
                     }),
                     ..default()

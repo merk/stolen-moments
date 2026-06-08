@@ -81,7 +81,13 @@ impl Plugin for TimeLoopPlugin {
             .add_systems(Startup, load_ghost_scene)
             .add_systems(
                 Update,
-                (start_new_loop, tick_and_record, playback_ghosts, draw_ghost_trails).chain(),
+                (
+                    start_new_loop,
+                    tick_and_record,
+                    playback_ghosts,
+                    draw_ghost_trails,
+                )
+                    .chain(),
             );
     }
 }
@@ -122,7 +128,14 @@ fn start_new_loop(
     let scene = state.character.clone();
     for (index, recording) in state.banked.iter().enumerate() {
         let color = loop_color(index);
-        spawn_ghost(&mut commands, scene.clone(), recording.clone(), color, index, spawn.world);
+        spawn_ghost(
+            &mut commands,
+            scene.clone(),
+            recording.clone(),
+            color,
+            index,
+            spawn.world,
+        );
     }
 
     // Send the player back to the start.
@@ -134,7 +147,10 @@ fn start_new_loop(
     // Let coins (and anything else) reset their per-loop state.
     commands.trigger(LoopReset);
 
-    info!("New loop started — {} ghost(s) replaying", state.banked.len());
+    info!(
+        "New loop started — {} ghost(s) replaying",
+        state.banked.len()
+    );
 }
 
 /// Assign each loop a distinct colour by spacing hues with the golden angle, so
@@ -156,7 +172,11 @@ fn spawn_ghost(
         .spawn((
             SceneRoot(scene),
             Transform::from_translation(start),
-            Ghost { recording, color, loop_index },
+            Ghost {
+                recording,
+                color,
+                loop_index,
+            },
             Name::new("Ghost"),
         ))
         // Once the scene's meshes exist, swap their materials for transparent
@@ -192,7 +212,8 @@ fn make_ghost_transparent(
         // Flat loop colour with a soft self-lit glow reads as a translucent,
         // clearly-identifiable echo of that loop.
         ghost_material.base_color = tint.with_alpha(GHOST_ALPHA);
-        ghost_material.emissive = LinearRgba::new(glow.red * 0.4, glow.green * 0.4, glow.blue * 0.4, 1.0);
+        ghost_material.emissive =
+            LinearRgba::new(glow.red * 0.4, glow.green * 0.4, glow.blue * 0.4, 1.0);
         ghost_material.alpha_mode = AlphaMode::Blend;
         let new_handle = materials.add(ghost_material);
         commands

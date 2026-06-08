@@ -143,7 +143,10 @@ fn spawn_adversaries(
 
 /// On a loop restart, send every adversary back to its spawn and reset it to a
 /// clean patrol so the new run starts from the same configuration each time.
-fn reset_adversaries(_reset: On<LoopReset>, mut adversaries: Query<(&mut Transform, &mut Adversary)>) {
+fn reset_adversaries(
+    _reset: On<LoopReset>,
+    mut adversaries: Query<(&mut Transform, &mut Adversary)>,
+) {
     for (mut transform, mut adv) in &mut adversaries {
         transform.translation = adv.home;
         adv.mode = Mode::Patrol;
@@ -177,7 +180,7 @@ fn update_adversaries(
         .iter()
         .map(|(t, g)| (g.loop_index(), t.translation))
         .collect();
-    ranked.sort_by(|a, b| b.0.cmp(&a.0));
+    ranked.sort_by_key(|&(idx, _)| std::cmp::Reverse(idx));
     target_positions.extend(ranked.into_iter().map(|(_, pos)| pos));
 
     for (mut transform, mut adv) in &mut adversaries {
