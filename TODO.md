@@ -4,3 +4,4 @@
 - tidy up world generation to be a few rooms of differing types (start, lobby, game tables, vault, security) and have some associated things going on
 - after world generation need to look at different mechanics: get code to get into vault from employee who wont leave until certain things happen, etc
 - resize game to fit browser window?
+- how will the timeloop tick recording handle rigged/animated objects?
