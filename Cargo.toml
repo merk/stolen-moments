@@ -1,0 +1,28 @@
+[package]
+name = "game-time"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = { version = "0.18", features = ["webgl2"] }
+noise = "0.9"
+rand = { version = "0.8", features = ["small_rng"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+
+# Dev profile: fast compile, slow binary — good for iteration
+[profile.dev]
+opt-level = 1
+
+# This makes dependencies compile fast even in dev mode
+[profile.dev.package."*"]
+opt-level = 3
+
+# Release profile: small wasm for web deploys (slower to build, runs once locally/CI)
+[profile.release]
+opt-level = "s"   # optimise for size
+lto = "thin"      # cross-crate inlining + dead-code elimination
+codegen-units = 1 # better optimisation at the cost of parallelism
+strip = true      # drop debug symbols / name section
+panic = "abort"   # no unwinding tables
