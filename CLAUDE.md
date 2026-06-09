@@ -32,6 +32,23 @@ Plugins that depend on the generated map run their setup in `PostStartup` so
 `DungeonMap`/`SpawnPoint` already exist. `LoopReset` is an event/observer that
 plugins hook to reset their state on each loop.
 
+### Module guidelines
+
+Keep modules **self-contained and testable**. Each should own one gameplay
+concern behind its `Plugin`, expose a minimal surface to the rest of the crate
+(components, events, resources — not internal systems), and depend on siblings
+through shared types/events rather than reaching into their internals. Pure
+logic (pathfinding, map math, scoring) should be factored into plain functions
+that can be unit-tested without spinning up an `App`; favour `#[cfg(test)]`
+tests alongside the code they cover.
+
+Prefer **small modules**. When one grows large or starts juggling unrelated
+concerns, split it — *unless* the split would add more complexity than it
+removes (threading state across the seam, duplicated glue, or an artificial
+boundary through tightly-coupled logic). Cohesion and a clean implementation win
+over hitting an arbitrary size target; keep a module whole when carving it up
+would make the code harder to follow.
+
 ## Commands
 
 ```bash
