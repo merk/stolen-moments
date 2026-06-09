@@ -5,6 +5,7 @@
 mod adversary;
 mod camera;
 mod coins;
+mod debug;
 mod dungeon;
 mod loading;
 mod player;
@@ -46,6 +47,7 @@ fn main() {
             coins::CoinsPlugin,
             time_loop::TimeLoopPlugin,
             adversary::AdversaryPlugin,
+            debug::DebugPlugin,
         ))
         .add_systems(Startup, spawn_lighting)
         .run();

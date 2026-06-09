@@ -74,17 +74,24 @@ impl Ghost {
 #[derive(Event, Default)]
 pub struct LoopReset;
 
+/// Request to close the current loop — the same action as the Shift+R keybind,
+/// but as a message so tooling (the debug "force loop" key) can trigger it too.
+#[derive(Message, Default)]
+pub struct CloseLoop;
+
 pub struct TimeLoopPlugin;
 
 impl Plugin for TimeLoopPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LoopState>()
+            .add_message::<CloseLoop>()
             .add_systems(Startup, load_ghost_scene)
             // A fresh level starts with no banked runs and a zeroed clock.
             .add_systems(OnEnter(GameState::Loading), reset_loop_state)
             .add_systems(
                 Update,
                 (
+                    close_loop_on_shift_r,
                     start_new_loop,
                     tick_and_record,
                     playback_ghosts,
@@ -110,18 +117,27 @@ fn reset_loop_state(mut state: ResMut<LoopState>) {
     state.banked.clear();
 }
 
-/// On Shift+R: bank the current loop, reset the player and timer, and respawn a
-/// ghost for every banked recording (including the one just finished).
+/// Translate the Shift+R keybind into a [`CloseLoop`] request, so the keyboard
+/// and tooling (the debug "force loop" key) both drive closure through one path.
+fn close_loop_on_shift_r(keys: Res<ButtonInput<KeyCode>>, mut close: MessageWriter<CloseLoop>) {
+    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+    if shift && keys.just_pressed(KeyCode::KeyR) {
+        close.write(CloseLoop);
+    }
+}
+
+/// On a [`CloseLoop`] request: bank the current loop, reset the player and timer,
+/// and respawn a ghost for every banked recording (including the one just done).
 fn start_new_loop(
-    keys: Res<ButtonInput<KeyCode>>,
+    mut close: MessageReader<CloseLoop>,
     mut commands: Commands,
     mut state: ResMut<LoopState>,
     ghosts: Query<Entity, With<Ghost>>,
     mut player: Query<&mut Transform, With<Player>>,
     spawn: Res<SpawnPoint>,
 ) {
-    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
-    if !(shift && keys.just_pressed(KeyCode::KeyR)) {
+    // Drain the queue so a buffered request can't re-fire on a later frame.
+    if close.read().count() == 0 {
         return;
     }
 

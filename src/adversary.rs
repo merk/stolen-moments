@@ -439,7 +439,14 @@ fn rotate_y(v: Vec3, angle: f32) -> Vec3 {
 
 /// Draw each adversary's vision cone on the floor: two edge rays plus the far
 /// arc. Yellow while patrolling, red the moment it's locked onto a target.
-fn draw_vision_cones(adversaries: Query<(&Transform, &Adversary)>, mut gizmos: Gizmos) {
+fn draw_vision_cones(
+    debug: Option<Res<crate::debug::DebugSettings>>,
+    adversaries: Query<(&Transform, &Adversary)>,
+    mut gizmos: Gizmos,
+) {
+    if debug.is_some_and(|d| !d.vision_cones) {
+        return;
+    }
     const ARC_SEGMENTS: usize = 12;
 
     for (transform, adv) in &adversaries {

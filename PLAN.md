@@ -199,11 +199,16 @@ gameplay (Phase 3) depends on them.
   before transitioning to `Playing` (avoids the white/untextured first frames,
   important for the slower web build). Simple progress text HUD.
 
-**P0.4 — Debug tooling** ⬜ *(TODO item 3)*
-- A `DebugPlugin` behind a toggle (e.g. F3): FPS/seed overlay, toggle vision-cone
-  gizmos, draw the room-tag overlay, free-fly camera, "reveal map", force
-  loop-reset, and a way to set/replay a specific seed. Invaluable for tuning the
-  later phases.
+**P0.4 — Debug tooling** ✅ *(TODO item 3)*
+- A `DebugPlugin` behind an F3 toggle: overlay (FPS/seed/state/entity counts),
+  F4 vision-cone toggle, F5 top-down floorplan overlay (the future home of the
+  room-tag overlay), F6 force loop-reset (drives the new `CloseLoop` message that
+  Shift+R now also routes through), F7 free-fly camera (IJKL pan, U/O raise).
+- `camera.rs`/`adversary.rs` read a shared `DebugSettings` via `Option<Res<…>>`
+  so they stay independent of the debug plugin.
+- *Deferred (need later phases):* room-tag colouring of the map overlay waits on
+  P1.1's `room_of`; live in-game seed entry remains the `GAME_SEED` env override
+  (logged at launch) rather than a UI field.
 
 ### Phase 1 — Structured world
 
