@@ -170,9 +170,12 @@ simulation a deterministic function of one master seed** wherever feasible:
 Ordered so each phase unblocks the next. Phases 0–1 are foundations; the heist
 gameplay (Phase 3) depends on them.
 
+> **Progress** — ✅ done · 🚧 in progress · ⬜ not started. Per-item status is on
+> each heading; the commit hash records where a done item landed.
+
 ### Phase 0 — Foundations (unblocks everything, speeds iteration)
 
-**P0.1 — Determinism core** *(TODO item 4, partial; enables 9, 13)*
+**P0.1 — Determinism core** ✅ *(commit `9e53977`)* *(TODO item 4, partial; enables 9, 13)*
 - Add `RunSeed` resource, seeded at startup (random per launch → stable for the
   whole session and all its loops; can later be overridden for shareable/
   debuggable seeds).
@@ -181,7 +184,7 @@ gameplay (Phase 3) depends on them.
 - *Acceptance:* same launch → identical guard routes every loop; logging the
   seed reproduces a level.
 
-**P0.2 — Game states + menus** *(TODO item 1)*
+**P0.2 — Game states + menus** ⬜ *(TODO item 1)*
 - Add a Bevy `States` enum: `Boot → MainMenu → Loading → Playing → Paused →
   GameOver/Win`.
 - Gate existing systems on `in_state(Playing)`; the PostStartup spawns become
@@ -191,12 +194,12 @@ gameplay (Phase 3) depends on them.
   adversary) must be preserved as `OnEnter(Playing)` system sets with explicit
   `.chain()`/ordering.
 
-**P0.3 — Loading state** *(TODO item 2)*
+**P0.3 — Loading state** ⬜ *(TODO item 2)*
 - While in `Loading`, wait for all GLB scene handles to reach `LoadState::Loaded`
   before transitioning to `Playing` (avoids the white/untextured first frames,
   important for the slower web build). Simple progress text HUD.
 
-**P0.4 — Debug tooling** *(TODO item 3)*
+**P0.4 — Debug tooling** ⬜ *(TODO item 3)*
 - A `DebugPlugin` behind a toggle (e.g. F3): FPS/seed overlay, toggle vision-cone
   gizmos, draw the room-tag overlay, free-fly camera, "reveal map", force
   loop-reset, and a way to set/replay a specific seed. Invaluable for tuning the
@@ -204,7 +207,7 @@ gameplay (Phase 3) depends on them.
 
 ### Phase 1 — Structured world
 
-**P1.1 — Level source abstraction + room types** *(TODO item 10)*
+**P1.1 — Level source abstraction + room types** ⬜ *(TODO item 10)*
 - Implement decision **A**: `LevelSource` trait, `Level`/`Room`/`RoomKind`,
   `HybridSource` as default, `DungeonMap.room_of`.
 - Room kinds: `Start`, `Lobby`, `GameTables`, `Vault`, `Security`, `Service`.
@@ -217,7 +220,7 @@ gameplay (Phase 3) depends on them.
 
 ### Phase 2 — Adversary variety
 
-**P2.1 — Adversary kinds** *(TODO item 4)*
+**P2.1 — Adversary kinds** ⬜ *(TODO item 4)*
 - Refactor `Adversary` so behaviour is data-driven by a `kind`, all RNG seeded
   per decision C:
   - **Static guard** — fixed post, cone sweeps; doesn't move until an *interest
@@ -234,11 +237,11 @@ gameplay (Phase 3) depends on them.
 
 ### Phase 3 — Heist mechanics
 
-**P3.1 — Persistence layer** *(TODO item 9, infra)*
+**P3.1 — Persistence layer** ⬜ *(TODO item 9, infra)*
 - Implement decision **B**: `Persistent` resource + `PersistPolicy` component;
   `LoopReset` observers honour the policy.
 
-**P3.2 — Vault + employee puzzle** *(TODO item 11)*
+**P3.2 — Vault + employee puzzle** ⬜ *(TODO item 11)*
 - A locked Vault requiring a code. An **employee NPC** (scripted, non-reactive →
   record/replay or a simple state machine) walks a route and won't leave/reveal
   the code until a condition is met (e.g. a distraction triggered elsewhere, or
@@ -249,7 +252,7 @@ gameplay (Phase 3) depends on them.
 
 ### Phase 4 — Presentation & fidelity
 
-**P4.1 — Animated/rigged object recording** *(TODO item 13)*
+**P4.1 — Animated/rigged object recording** ⬜ *(TODO item 13)*
 - Today `Sample` records only `translation`+`rotation`. Decide per actor type:
   - *Non-reactive scripted actors* (employee, opening doors, slot machines):
     record an **animation/state channel** alongside the transform, or replay a
@@ -259,7 +262,7 @@ gameplay (Phase 3) depends on them.
 - *Note:* this is why determinism + record/replay were settled early — item 13 is
   mostly a consequence of those choices, not a separate system.
 
-**P4.2 — Resize to browser window** *(TODO item 12)*
+**P4.2 — Resize to browser window** ⬜ *(TODO item 12)*
 - Drive the camera's `ScalingMode`/viewport from the window size so the web build
   fills (and reflows with) the browser window. Verify against `build-web.sh`
   output and the GitHub Pages deploy.
