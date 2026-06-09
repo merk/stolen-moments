@@ -8,6 +8,7 @@ use rand::{Rng, SeedableRng};
 
 use crate::coins::{Coin, CoinScore};
 use crate::dungeon::{DungeonMap, SpawnPoint};
+use crate::seed::RunSeed;
 
 /// Don't place props within this tile radius of the player's spawn.
 const SPAWN_CLEARANCE: i32 = 2;
@@ -73,8 +74,9 @@ fn scatter_props(
     map: Res<DungeonMap>,
     spawn: Res<SpawnPoint>,
     mut score: ResMut<CoinScore>,
+    run_seed: Res<RunSeed>,
 ) {
-    let mut rng = SmallRng::from_entropy();
+    let mut rng = SmallRng::seed_from_u64(run_seed.derive("props"));
 
     // Preload each prop scene once and reuse the handle.
     let handles: Vec<Handle<Scene>> = PROPS

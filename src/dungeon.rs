@@ -4,6 +4,8 @@ use bevy::prelude::*;
 use noise::{NoiseFn, Perlin};
 use std::collections::VecDeque;
 
+use crate::seed::RunSeed;
+
 /// Grid dimensions (in tiles).
 pub const MAP_WIDTH: usize = 48;
 pub const MAP_HEIGHT: usize = 48;
@@ -97,8 +99,14 @@ impl Plugin for DungeonPlugin {
 
 /// Generate the map from Perlin noise, keep only the floor region reachable
 /// from the centre, store it as a resource, and spawn the tile meshes.
-fn generate_dungeon(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let seed: u32 = rand::random();
+fn generate_dungeon(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    run_seed: Res<RunSeed>,
+) {
+    // Truncating to u32 is fine: Perlin only takes a u32 seed, and the derived
+    // value is already well-mixed so the low 32 bits are as good as any.
+    let seed = run_seed.derive("dungeon") as u32;
 
     let mut map = build_noise_map(seed);
     // Join every disconnected cavern into one component instead of discarding

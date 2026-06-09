@@ -14,6 +14,7 @@ use rand::{Rng, SeedableRng};
 
 use crate::dungeon::{DungeonMap, SpawnPoint};
 use crate::player::Player;
+use crate::seed::RunSeed;
 use crate::time_loop::{Ghost, LoopReset};
 
 /// How many adversaries to scatter through the dungeon.
@@ -87,8 +88,13 @@ pub struct AdversaryPlugin;
 impl Plugin for AdversaryPlugin {
     fn build(&self, app: &mut App) {
         // PostStartup so the dungeon map and spawn point already exist.
+        // Sensing/decision/movement runs on FixedUpdate so behaviour is a pure
+        // function of the seed and tick count, independent of frame rate — the
+        // basis for guard routes repeating identically across loops. The cone
+        // gizmo draws every frame in Update off the cached `look_dir`.
         app.add_systems(PostStartup, spawn_adversaries)
-            .add_systems(Update, (update_adversaries, draw_vision_cones).chain())
+            .add_systems(FixedUpdate, update_adversaries)
+            .add_systems(Update, draw_vision_cones)
             .add_observer(reset_adversaries);
     }
 }
@@ -98,11 +104,14 @@ fn spawn_adversaries(
     asset_server: Res<AssetServer>,
     map: Res<DungeonMap>,
     spawn: Res<SpawnPoint>,
+    run_seed: Res<RunSeed>,
 ) {
     let scene = asset_server
         .load(GltfAssetLabel::Scene(0).from_asset("Models/GLB format/character-orc.glb"));
 
-    let mut rng = SmallRng::from_entropy();
+    // One RNG seeds placement/initial facing; each adversary then carries its
+    // own seeded stream so they wander independently yet reproducibly.
+    let mut rng = SmallRng::seed_from_u64(run_seed.derive("adversary.spawn"));
     let (sx, sy) = (spawn.tile.0 as i32, spawn.tile.1 as i32);
 
     for i in 0..ADVERSARY_COUNT {
@@ -133,8 +142,8 @@ fn spawn_adversaries(
                 repath_timer: 0.0,
                 path: Vec::new(),
                 path_index: 0,
-                // Per-adversary RNG so each wanders independently.
-                rng: SmallRng::from_entropy(),
+                // Per-adversary RNG so each wanders independently but reproducibly.
+                rng: SmallRng::seed_from_u64(run_seed.derive_indexed("adversary", i)),
             },
             Name::new(format!("Adversary {i}")),
         ));

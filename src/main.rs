@@ -8,6 +8,7 @@ mod coins;
 mod dungeon;
 mod player;
 mod props;
+mod seed;
 mod time_loop;
 mod wasm_compat;
 
@@ -33,6 +34,7 @@ fn main() {
             ..default()
         })
         .add_plugins((
+            seed::SeedPlugin,
             dungeon::DungeonPlugin,
             camera::IsoCameraPlugin,
             player::PlayerPlugin,
