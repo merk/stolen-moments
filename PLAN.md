@@ -184,7 +184,7 @@ gameplay (Phase 3) depends on them.
 - *Acceptance:* same launch → identical guard routes every loop; logging the
   seed reproduces a level.
 
-**P0.2 — Game states + menus** ⬜ *(TODO item 1)*
+**P0.2 — Game states + menus** ✅ *(commit `c713494`)* *(TODO item 1)*
 - Add a Bevy `States` enum: `Boot → MainMenu → Loading → Playing → Paused →
   GameOver/Win`.
 - Gate existing systems on `in_state(Playing)`; the PostStartup spawns become
