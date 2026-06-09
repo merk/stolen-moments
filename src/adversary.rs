@@ -10,9 +10,10 @@ use std::collections::VecDeque;
 
 use bevy::prelude::*;
 use rand::rngs::SmallRng;
+use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 
-use crate::dungeon::{DungeonMap, SpawnPoint};
+use crate::level::{LevelMap, RoomKind, SpawnPoint};
 use crate::loading::LoadingAssets;
 use crate::player::Player;
 use crate::seed::RunSeed;
@@ -114,7 +115,7 @@ fn spawn_adversaries(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut loading: ResMut<LoadingAssets>,
-    map: Res<DungeonMap>,
+    map: Res<LevelMap>,
     spawn: Res<SpawnPoint>,
     run_seed: Res<RunSeed>,
 ) {
@@ -128,16 +129,29 @@ fn spawn_adversaries(
     let mut rng = SmallRng::seed_from_u64(run_seed.derive("adversary.spawn"));
     let (sx, sy) = (spawn.tile.0 as i32, spawn.tile.1 as i32);
 
+    // Guards post up in the Security room; a shuffled pool hands out distinct
+    // tiles. Without one (e.g. a roomless source), fall back to a random tile a
+    // comfortable distance from the player's spawn.
+    let mut security: Vec<(usize, usize)> = map
+        .rooms()
+        .iter()
+        .filter(|r| r.kind == RoomKind::Security)
+        .flat_map(|r| r.tiles.iter().copied())
+        .collect();
+    security.shuffle(&mut rng);
+    let mut security = security.into_iter();
+
     for i in 0..ADVERSARY_COUNT {
-        // Pick a floor tile a comfortable distance from the player's spawn.
-        let tile = loop {
-            let t = random_walkable(&map, &mut rng);
-            let far = (t.0 as i32 - sx).abs() >= SPAWN_CLEARANCE
-                || (t.1 as i32 - sy).abs() >= SPAWN_CLEARANCE;
-            if far {
-                break t;
+        let tile = security.next().unwrap_or_else(|| {
+            loop {
+                let t = random_walkable(&map, &mut rng);
+                let far = (t.0 as i32 - sx).abs() >= SPAWN_CLEARANCE
+                    || (t.1 as i32 - sy).abs() >= SPAWN_CLEARANCE;
+                if far {
+                    break t;
+                }
             }
-        };
+        });
 
         let world = map.tile_to_world(tile.0, tile.1);
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
@@ -184,7 +198,7 @@ fn reset_adversaries(
 /// Sense, decide, and move every adversary for this frame.
 fn update_adversaries(
     time: Res<Time>,
-    map: Res<DungeonMap>,
+    map: Res<LevelMap>,
     // The live player and every ghost are all valid prey. `Without<Adversary>`
     // keeps these read-only Transform queries disjoint from the mutable one below.
     player: Query<&Transform, (With<Player>, Without<Adversary>)>,
@@ -295,7 +309,7 @@ fn update_adversaries(
 }
 
 /// Begin chasing `target`: lock the last-seen position and path straight to it.
-fn enter_chase(map: &DungeonMap, adv: &mut Adversary, here: (usize, usize), target: Vec3) {
+fn enter_chase(map: &LevelMap, adv: &mut Adversary, here: (usize, usize), target: Vec3) {
     adv.mode = Mode::Chase;
     adv.last_seen = target;
     adv.repath_timer = REPATH_INTERVAL;
@@ -305,7 +319,7 @@ fn enter_chase(map: &DungeonMap, adv: &mut Adversary, here: (usize, usize), targ
 }
 
 /// Replace the followed path with a fresh BFS route from `here` to `goal`.
-fn repath(map: &DungeonMap, adv: &mut Adversary, here: (usize, usize), goal: (usize, usize)) {
+fn repath(map: &LevelMap, adv: &mut Adversary, here: (usize, usize), goal: (usize, usize)) {
     if let Some(path) = bfs_path(map, here, goal) {
         adv.path = path;
         adv.path_index = 0;
@@ -314,7 +328,7 @@ fn repath(map: &DungeonMap, adv: &mut Adversary, here: (usize, usize), goal: (us
 
 /// Return the first target (in caller-supplied priority order) that sits inside
 /// the cone with clear line of sight.
-fn first_visible(map: &DungeonMap, pos: Vec3, look_dir: Vec3, targets: &[Vec3]) -> Option<Vec3> {
+fn first_visible(map: &LevelMap, pos: Vec3, look_dir: Vec3, targets: &[Vec3]) -> Option<Vec3> {
     let min_cos = VISION_HALF_ANGLE.cos();
 
     for &target in targets {
@@ -340,7 +354,7 @@ fn first_visible(map: &DungeonMap, pos: Vec3, look_dir: Vec3, targets: &[Vec3]) 
 }
 
 /// March across the grid between two world points; blocked by any wall tile.
-fn clear_line_of_sight(map: &DungeonMap, from: Vec3, to: Vec3) -> bool {
+fn clear_line_of_sight(map: &LevelMap, from: Vec3, to: Vec3) -> bool {
     let delta = horizontal(to - from);
     let dist = delta.length();
     if dist < 1e-3 {
@@ -359,7 +373,7 @@ fn clear_line_of_sight(map: &DungeonMap, from: Vec3, to: Vec3) -> bool {
 /// Breadth-first shortest path over walkable tiles, returning the waypoints
 /// after `start` up to and including `goal`. Empty when already at the goal.
 fn bfs_path(
-    map: &DungeonMap,
+    map: &LevelMap,
     start: (usize, usize),
     goal: (usize, usize),
 ) -> Option<Vec<(usize, usize)>> {
@@ -399,7 +413,7 @@ fn bfs_path(
 
 /// Pick a uniformly random walkable tile. The connected map guarantees one
 /// exists, so this always terminates.
-fn random_walkable(map: &DungeonMap, rng: &mut SmallRng) -> (usize, usize) {
+fn random_walkable(map: &LevelMap, rng: &mut SmallRng) -> (usize, usize) {
     loop {
         let x = rng.gen_range(0..map.width);
         let y = rng.gen_range(0..map.height);

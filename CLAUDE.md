@@ -19,7 +19,7 @@ components/systems:
 
 | Module | Plugin | Responsibility |
 |---|---|---|
-| `dungeon.rs` | `DungeonPlugin` | Noise-based map gen, `DungeonMap` + tile↔world helpers, `SpawnPoint` |
+| `level/` | `LevelPlugin` | `LevelMap` (tiles + room tags) + tile↔world helpers, `SpawnPoint`; a `LevelSource` generation pipeline (noise → room stamping → connectivity) and tile rendering |
 | `camera.rs` | `IsoCameraPlugin` | Isometric orthographic camera that follows the player |
 | `player.rs` | `PlayerPlugin` | Player spawn + movement |
 | `props.rs` | `PropsPlugin` | Scatters barrels/rocks/chests/coins onto floor tiles |
@@ -28,9 +28,18 @@ components/systems:
 | `adversary.rs` | `AdversaryPlugin` | Vision-cone patrol/chase AI, grid pathfinding |
 | `wasm_compat.rs` | — | Web-only shims |
 
-Plugins that depend on the generated map run their setup in `PostStartup` so
-`DungeonMap`/`SpawnPoint` already exist. `LoopReset` is an event/observer that
-plugins hook to reset their state on each loop.
+The world is built on `OnEnter(GameState::Loading)` via the `WorldGen` system
+sets: `Terrain` (creates `LevelMap`/`SpawnPoint`) runs before `Populate`
+(player/props/adversary), so the latter can rely on the map already existing.
+`LoopReset` is an event/observer that plugins hook to reset their state on each
+loop.
+
+The `level/` module is itself layered: `map` (the runtime `LevelMap` everything
+queries), the generation pipeline (`source` orchestrating `noise`, `rooms`,
+`connect`), and `render` (tiles → meshes). Open rooms merge their floor with the
+cavern; sealed rooms (Vault, Security) force a protected wall ring with one
+doorway, and connectivity is protected-aware so sealed rooms are reachable only
+through their doorways.
 
 ### Module guidelines
 

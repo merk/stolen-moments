@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 
 use crate::camera::CameraTarget;
-use crate::dungeon::{DungeonMap, SpawnPoint};
+use crate::level::{LevelMap, SpawnPoint};
 use crate::loading::LoadingAssets;
 use crate::state::{GameState, InGame, WorldGen};
 
@@ -56,7 +56,7 @@ fn spawn_player(
 fn move_player(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
-    map: Res<DungeonMap>,
+    map: Res<LevelMap>,
     mut player: Query<&mut Transform, With<Player>>,
 ) {
     let Ok(mut transform) = player.single_mut() else {

@@ -1,7 +1,7 @@
 //! Whole-simulation determinism: one master seed per launch, with stable
 //! sub-seeds derived per subsystem.
 //!
-//! Every gameplay RNG (dungeon gen, prop scatter, adversary behaviour) draws
+//! Every gameplay RNG (level gen, prop scatter, adversary behaviour) draws
 //! from a seed derived off [`RunSeed`] rather than the OS entropy pool, so a
 //! given launch reproduces identical levels and guard routes on every loop.
 //! Logging the seed (or setting `GAME_SEED`) reproduces a whole session.
@@ -17,7 +17,7 @@ use bevy::prelude::*;
 pub struct RunSeed(pub u64);
 
 impl RunSeed {
-    /// A stable sub-seed for a named subsystem (e.g. `"dungeon"`, `"props"`).
+    /// A stable sub-seed for a named subsystem (e.g. `"level"`, `"props"`).
     ///
     /// Deterministic across runs and Rust versions: an FNV-1a hash of the label
     /// mixed with the master seed through splitmix64. The same `(master, label)`
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn derive_is_deterministic() {
         let s = RunSeed(12345);
-        assert_eq!(s.derive("dungeon"), s.derive("dungeon"));
+        assert_eq!(s.derive("level"), s.derive("level"));
         assert_eq!(
             s.derive_indexed("adversary", 3),
             s.derive_indexed("adversary", 3)
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn distinct_labels_and_indices_differ() {
         let s = RunSeed(12345);
-        assert_ne!(s.derive("dungeon"), s.derive("props"));
+        assert_ne!(s.derive("level"), s.derive("props"));
         assert_ne!(s.derive("adversary"), s.derive_indexed("adversary", 0));
         assert_ne!(
             s.derive_indexed("adversary", 0),
@@ -104,6 +104,6 @@ mod tests {
 
     #[test]
     fn distinct_masters_differ() {
-        assert_ne!(RunSeed(1).derive("dungeon"), RunSeed(2).derive("dungeon"));
+        assert_ne!(RunSeed(1).derive("level"), RunSeed(2).derive("level"));
     }
 }

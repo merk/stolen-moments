@@ -10,7 +10,7 @@ use std::sync::Arc;
 use bevy::prelude::*;
 use bevy::scene::SceneInstanceReady;
 
-use crate::dungeon::SpawnPoint;
+use crate::level::SpawnPoint;
 use crate::player::Player;
 use crate::state::{GameState, InGame};
 

@@ -1,13 +1,15 @@
 //! Scatters decorative props (barrels, chests, coins, rocks, columns) across
 //! the dungeon floor to give the caverns some life.
 
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 use rand::rngs::SmallRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 
 use crate::coins::{Coin, CoinScore};
-use crate::dungeon::{DungeonMap, SpawnPoint};
+use crate::level::{LevelMap, RoomKind, SpawnPoint};
 use crate::loading::LoadingAssets;
 use crate::seed::RunSeed;
 use crate::state::{GameState, InGame, WorldGen};
@@ -21,6 +23,9 @@ struct PropKind {
     count: usize,
     /// Coins float and spin; everything else sits on the floor.
     coin: bool,
+    /// Which room kind to favour when placing this prop (chips on the game
+    /// tables, loot in the vault), falling back to general floor on overflow.
+    prefer: Option<RoomKind>,
 }
 
 const PROPS: &[PropKind] = &[
@@ -28,31 +33,37 @@ const PROPS: &[PropKind] = &[
         asset: "coin.glb",
         count: 30,
         coin: true,
+        prefer: Some(RoomKind::GameTables),
     },
     PropKind {
         asset: "barrel.glb",
         count: 16,
         coin: false,
+        prefer: None,
     },
     PropKind {
         asset: "rocks.glb",
         count: 16,
         coin: false,
+        prefer: None,
     },
     PropKind {
         asset: "stones.glb",
         count: 12,
         coin: false,
+        prefer: None,
     },
     PropKind {
         asset: "chest.glb",
         count: 6,
         coin: false,
+        prefer: Some(RoomKind::Vault),
     },
     PropKind {
         asset: "column.glb",
         count: 4,
         coin: false,
+        prefer: None,
     },
 ];
 
@@ -76,7 +87,7 @@ impl Plugin for PropsPlugin {
 fn scatter_props(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    map: Res<DungeonMap>,
+    map: Res<LevelMap>,
     spawn: Res<SpawnPoint>,
     mut score: ResMut<CoinScore>,
     mut loading: ResMut<LoadingAssets>,
@@ -98,13 +109,23 @@ fn scatter_props(
         })
         .collect();
 
-    // Collect every eligible floor tile, then shuffle so we can hand out unique
-    // tiles to each prop type without ever stacking two props on one tile.
+    // Tiles in a room a prop *prefers* are reserved into their own pool; the
+    // rest become the general scatter. Each pool is shuffled and handed out via
+    // a unique iterator, so two props never stack on one tile — props overflow
+    // from their preferred pool into the general one when the room fills up.
+    let reserved: Vec<RoomKind> = PROPS.iter().filter_map(|p| p.prefer).collect();
     let (sx, sy) = (spawn.tile.0 as i32, spawn.tile.1 as i32);
-    let mut tiles: Vec<(usize, usize)> = Vec::new();
+    let mut preferred: HashMap<RoomKind, Vec<(usize, usize)>> = HashMap::new();
+    let mut general: Vec<(usize, usize)> = Vec::new();
     for y in 0..map.height {
         for x in 0..map.width {
             if !map.is_walkable(x, y) {
+                continue;
+            }
+            if let Some(kind) = map.room_kind_at(x, y)
+                && reserved.contains(&kind)
+            {
+                preferred.entry(kind).or_default().push((x, y));
                 continue;
             }
             // Keep the spawn area clear so the player isn't boxed in.
@@ -112,15 +133,26 @@ fn scatter_props(
             {
                 continue;
             }
-            tiles.push((x, y));
+            general.push((x, y));
         }
     }
-    tiles.shuffle(&mut rng);
-    let mut available = tiles.into_iter();
+    general.shuffle(&mut rng);
+    let mut pools: HashMap<RoomKind, std::vec::IntoIter<(usize, usize)>> = preferred
+        .into_iter()
+        .map(|(kind, mut tiles)| {
+            tiles.shuffle(&mut rng);
+            (kind, tiles.into_iter())
+        })
+        .collect();
+    let mut available = general.into_iter();
 
     for (kind, handle) in PROPS.iter().zip(&handles) {
-        for (placed, _) in (0..kind.count).enumerate() {
-            let Some((x, y)) = available.next() else {
+        for placed in 0..kind.count {
+            let tile = kind
+                .prefer
+                .and_then(|k| pools.get_mut(&k).and_then(Iterator::next))
+                .or_else(|| available.next());
+            let Some((x, y)) = tile else {
                 warn!(
                     "Ran out of floor tiles placing props; {} got {placed}/{}",
                     kind.asset, kind.count

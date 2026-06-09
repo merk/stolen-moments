@@ -51,7 +51,7 @@ impl ComputedStates for InGame {
 }
 
 /// Ordering for the world build on `OnEnter(GameState::Loading)`: terrain first
-/// (it creates `DungeonMap`/`SpawnPoint`), then everything that populates it.
+/// (it creates `LevelMap`/`SpawnPoint`), then everything that populates it.
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WorldGen {
     Terrain,

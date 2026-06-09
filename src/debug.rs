@@ -17,7 +17,7 @@ use bevy::prelude::*;
 
 use crate::adversary::Adversary;
 use crate::coins::Coin;
-use crate::dungeon::{DungeonMap, TILE_SIZE};
+use crate::level::{LevelMap, RoomKind, TILE_SIZE};
 use crate::seed::RunSeed;
 use crate::state::GameState;
 use crate::time_loop::{CloseLoop, Ghost};
@@ -165,13 +165,9 @@ fn on_off(flag: bool) -> &'static str {
     if flag { "on" } else { "off" }
 }
 
-/// Draw a flat square over every floor tile — a schematic floorplan that doubles
-/// as the future home of the room-tag overlay (P1.1 will colour by room).
-fn draw_map_overlay(
-    settings: Res<DebugSettings>,
-    map: Option<Res<DungeonMap>>,
-    mut gizmos: Gizmos,
-) {
+/// Draw a flat square over every floor tile — a schematic floorplan, coloured by
+/// the tile's semantic room kind (cyan for un-roomed cavern floor).
+fn draw_map_overlay(settings: Res<DebugSettings>, map: Option<Res<LevelMap>>, mut gizmos: Gizmos) {
     if !settings.map_overlay {
         return;
     }
@@ -182,7 +178,6 @@ fn draw_map_overlay(
     // The rect gizmo lies in the XY plane; rotate it flat onto the ground (XZ).
     let flat = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
     let size = Vec2::splat(TILE_SIZE * 0.9);
-    let color = Color::srgba(0.2, 0.85, 1.0, 0.6);
 
     for y in 0..map.height {
         for x in 0..map.width {
@@ -190,7 +185,24 @@ fn draw_map_overlay(
                 continue;
             }
             let centre = map.tile_to_world(x, y) + Vec3::Y * MAP_OVERLAY_LIFT;
-            gizmos.rect(Isometry3d::new(centre, flat), size, color);
+            gizmos.rect(
+                Isometry3d::new(centre, flat),
+                size,
+                room_color(map.room_kind_at(x, y)),
+            );
         }
+    }
+}
+
+/// Floorplan tint for a tile by its room kind; un-roomed cavern floor stays cyan.
+fn room_color(kind: Option<RoomKind>) -> Color {
+    match kind {
+        None => Color::srgba(0.2, 0.85, 1.0, 0.35),
+        Some(RoomKind::Start) => Color::srgba(0.3, 1.0, 0.4, 0.7),
+        Some(RoomKind::Lobby) => Color::srgba(0.6, 0.8, 1.0, 0.7),
+        Some(RoomKind::GameTables) => Color::srgba(1.0, 0.85, 0.2, 0.7),
+        Some(RoomKind::Vault) => Color::srgba(1.0, 0.55, 0.1, 0.8),
+        Some(RoomKind::Security) => Color::srgba(1.0, 0.25, 0.2, 0.8),
+        Some(RoomKind::Service) => Color::srgba(0.7, 0.7, 0.75, 0.7),
     }
 }

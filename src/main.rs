@@ -6,7 +6,7 @@ mod adversary;
 mod camera;
 mod coins;
 mod debug;
-mod dungeon;
+mod level;
 mod loading;
 mod player;
 mod props;
@@ -40,7 +40,7 @@ fn main() {
             state::StatePlugin,
             loading::LoadingPlugin,
             seed::SeedPlugin,
-            dungeon::DungeonPlugin,
+            level::LevelPlugin,
             camera::IsoCameraPlugin,
             player::PlayerPlugin,
             props::PropsPlugin,
