@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use noise::{NoiseFn, Perlin};
 use std::collections::VecDeque;
 
+use crate::loading::LoadingAssets;
 use crate::seed::RunSeed;
 use crate::state::{GameState, InGame, WorldGen};
 
@@ -107,6 +108,7 @@ impl Plugin for DungeonPlugin {
 fn generate_dungeon(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    mut loading: ResMut<LoadingAssets>,
     run_seed: Res<RunSeed>,
 ) {
     // Truncating to u32 is fine: Perlin only takes a u32 seed, and the derived
@@ -125,7 +127,7 @@ fn generate_dungeon(
         map.floor_count()
     );
 
-    spawn_tiles(&map, &mut commands, &asset_server);
+    spawn_tiles(&map, &mut commands, &asset_server, &mut loading);
 
     commands.insert_resource(SpawnPoint {
         tile: spawn_tile,
@@ -291,11 +293,18 @@ fn neighbours(x: usize, y: usize, w: usize, h: usize) -> impl Iterator<Item = (u
 
 /// Spawn floor tiles for walkable cells, and the textured Kenney wall block for
 /// any wall cell that borders the cavern (so we skip thousands of hidden cells).
-fn spawn_tiles(map: &DungeonMap, commands: &mut Commands, asset_server: &AssetServer) {
-    let floor_scene =
-        asset_server.load(GltfAssetLabel::Scene(0).from_asset("Models/GLB format/floor.glb"));
-    let wall_scene =
-        asset_server.load(GltfAssetLabel::Scene(0).from_asset("Models/GLB format/wall.glb"));
+fn spawn_tiles(
+    map: &DungeonMap,
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    loading: &mut LoadingAssets,
+) {
+    let floor_scene = loading.track(
+        asset_server.load(GltfAssetLabel::Scene(0).from_asset("Models/GLB format/floor.glb")),
+    );
+    let wall_scene = loading.track(
+        asset_server.load(GltfAssetLabel::Scene(0).from_asset("Models/GLB format/wall.glb")),
+    );
 
     for y in 0..map.height {
         for x in 0..map.width {

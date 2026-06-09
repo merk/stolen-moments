@@ -8,6 +8,7 @@ use rand::{Rng, SeedableRng};
 
 use crate::coins::{Coin, CoinScore};
 use crate::dungeon::{DungeonMap, SpawnPoint};
+use crate::loading::LoadingAssets;
 use crate::seed::RunSeed;
 use crate::state::{GameState, InGame, WorldGen};
 
@@ -78,6 +79,7 @@ fn scatter_props(
     map: Res<DungeonMap>,
     spawn: Res<SpawnPoint>,
     mut score: ResMut<CoinScore>,
+    mut loading: ResMut<LoadingAssets>,
     run_seed: Res<RunSeed>,
 ) {
     // A fresh level starts with an empty tally; coins re-add to `total` below.
@@ -90,8 +92,9 @@ fn scatter_props(
     let handles: Vec<Handle<Scene>> = PROPS
         .iter()
         .map(|p| {
-            asset_server
-                .load(GltfAssetLabel::Scene(0).from_asset(format!("Models/GLB format/{}", p.asset)))
+            loading.track(asset_server.load(
+                GltfAssetLabel::Scene(0).from_asset(format!("Models/GLB format/{}", p.asset)),
+            ))
         })
         .collect();
 

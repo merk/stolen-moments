@@ -4,6 +4,7 @@ use bevy::prelude::*;
 
 use crate::camera::CameraTarget;
 use crate::dungeon::{DungeonMap, SpawnPoint};
+use crate::loading::LoadingAssets;
 use crate::state::{GameState, InGame, WorldGen};
 
 const MOVE_SPEED: f32 = 5.0;
@@ -30,9 +31,17 @@ impl Plugin for PlayerPlugin {
     }
 }
 
-fn spawn_player(mut commands: Commands, asset_server: Res<AssetServer>, spawn: Res<SpawnPoint>) {
-    let scene = asset_server
-        .load(GltfAssetLabel::Scene(0).from_asset("Models/GLB format/character-human.glb"));
+fn spawn_player(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut loading: ResMut<LoadingAssets>,
+    spawn: Res<SpawnPoint>,
+) {
+    let scene =
+        loading
+            .track(asset_server.load(
+                GltfAssetLabel::Scene(0).from_asset("Models/GLB format/character-human.glb"),
+            ));
 
     commands.spawn((
         SceneRoot(scene),

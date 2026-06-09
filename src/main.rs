@@ -6,6 +6,7 @@ mod adversary;
 mod camera;
 mod coins;
 mod dungeon;
+mod loading;
 mod player;
 mod props;
 mod seed;
@@ -36,6 +37,7 @@ fn main() {
         })
         .add_plugins((
             state::StatePlugin,
+            loading::LoadingPlugin,
             seed::SeedPlugin,
             dungeon::DungeonPlugin,
             camera::IsoCameraPlugin,

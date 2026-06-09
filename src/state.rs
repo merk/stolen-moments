@@ -18,9 +18,9 @@ pub enum GameState {
     #[default]
     Boot,
     MainMenu,
-    /// The level is built here and asset loads kick off. For now this advances
-    /// to `Playing` the next frame; P0.3 will hold until the GLB scenes finish
-    /// loading so the first played frame is fully textured.
+    /// The level is built here and asset loads kick off. Held by `loading.rs`
+    /// until every tracked GLB scene has finished loading (with dependencies),
+    /// so the first played frame is fully textured.
     Loading,
     Playing,
     Paused,
@@ -70,13 +70,11 @@ impl Plugin for StatePlugin {
             )
             .add_systems(OnEnter(GameState::Boot), enter_main_menu)
             .add_systems(OnEnter(GameState::MainMenu), spawn_main_menu)
-            .add_systems(OnEnter(GameState::Loading), spawn_loading_screen)
             .add_systems(OnEnter(GameState::Paused), spawn_pause_menu)
             .add_systems(
                 Update,
                 (
                     main_menu_keys.run_if(in_state(GameState::MainMenu)),
-                    finish_loading.run_if(in_state(GameState::Loading)),
                     pause_on_esc.run_if(in_state(GameState::Playing)),
                     resume_on_esc.run_if(in_state(GameState::Paused)),
                     menu_actions,
@@ -89,12 +87,6 @@ impl Plugin for StatePlugin {
 /// `Boot` exists only to give the app one settled frame; advance straight on.
 fn enter_main_menu(mut next: ResMut<NextState<GameState>>) {
     next.set(GameState::MainMenu);
-}
-
-/// P0.2 placeholder: advance the moment the level is built. P0.3 replaces this
-/// with a wait for every GLB scene handle to reach `LoadState::Loaded`.
-fn finish_loading(mut next: ResMut<NextState<GameState>>) {
-    next.set(GameState::Playing);
 }
 
 fn pause_on_esc(keys: Res<ButtonInput<KeyCode>>, mut next: ResMut<NextState<GameState>>) {
@@ -151,13 +143,6 @@ fn spawn_pause_menu(mut commands: Commands) {
     });
 }
 
-fn spawn_loading_screen(mut commands: Commands) {
-    let root = menu_overlay(&mut commands, GameState::Loading);
-    commands.entity(root).with_children(|p| {
-        spawn_title(p, "Loading…");
-    });
-}
-
 /// Apply click results: drive state transitions or quit the app.
 fn menu_actions(
     interactions: Query<(&Interaction, &MenuAction), Changed<Interaction>>,
@@ -193,7 +178,7 @@ fn menu_hover(
 }
 
 /// A full-screen, centred, dimmed overlay scoped to the given menu state.
-fn menu_overlay(commands: &mut Commands, scope: GameState) -> Entity {
+pub(crate) fn menu_overlay(commands: &mut Commands, scope: GameState) -> Entity {
     commands
         .spawn((
             Node {
@@ -212,7 +197,7 @@ fn menu_overlay(commands: &mut Commands, scope: GameState) -> Entity {
         .id()
 }
 
-fn spawn_title(parent: &mut ChildSpawnerCommands, text: &str) {
+pub(crate) fn spawn_title(parent: &mut ChildSpawnerCommands, text: &str) {
     parent.spawn((
         Text::new(text),
         TextFont {

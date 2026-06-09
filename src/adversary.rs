@@ -13,6 +13,7 @@ use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 
 use crate::dungeon::{DungeonMap, SpawnPoint};
+use crate::loading::LoadingAssets;
 use crate::player::Player;
 use crate::seed::RunSeed;
 use crate::state::{GameState, InGame, WorldGen};
@@ -112,12 +113,15 @@ impl Plugin for AdversaryPlugin {
 fn spawn_adversaries(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    mut loading: ResMut<LoadingAssets>,
     map: Res<DungeonMap>,
     spawn: Res<SpawnPoint>,
     run_seed: Res<RunSeed>,
 ) {
-    let scene = asset_server
-        .load(GltfAssetLabel::Scene(0).from_asset("Models/GLB format/character-orc.glb"));
+    let scene = loading.track(
+        asset_server
+            .load(GltfAssetLabel::Scene(0).from_asset("Models/GLB format/character-orc.glb")),
+    );
 
     // One RNG seeds placement/initial facing; each adversary then carries its
     // own seeded stream so they wander independently yet reproducibly.
