@@ -194,7 +194,7 @@ gameplay (Phase 3) depends on them.
   adversary) must be preserved as `OnEnter(Playing)` system sets with explicit
   `.chain()`/ordering.
 
-**P0.3 — Loading state** ⬜ *(TODO item 2)*
+**P0.3 — Loading state** ✅ *(commit `9ff86ec`)* *(TODO item 2)*
 - While in `Loading`, wait for all GLB scene handles to reach `LoadState::Loaded`
   before transitioning to `Playing` (avoids the white/untextured first frames,
   important for the slower web build). Simple progress text HUD.
