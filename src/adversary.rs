@@ -15,6 +15,7 @@ use rand::{Rng, SeedableRng};
 use crate::dungeon::{DungeonMap, SpawnPoint};
 use crate::player::Player;
 use crate::seed::RunSeed;
+use crate::state::{GameState, InGame, WorldGen};
 use crate::time_loop::{Ghost, LoopReset};
 
 /// How many adversaries to scatter through the dungeon.
@@ -92,10 +93,19 @@ impl Plugin for AdversaryPlugin {
         // function of the seed and tick count, independent of frame rate — the
         // basis for guard routes repeating identically across loops. The cone
         // gizmo draws every frame in Update off the cached `look_dir`.
-        app.add_systems(PostStartup, spawn_adversaries)
-            .add_systems(FixedUpdate, update_adversaries)
-            .add_systems(Update, draw_vision_cones)
-            .add_observer(reset_adversaries);
+        app.add_systems(
+            OnEnter(GameState::Loading),
+            spawn_adversaries.in_set(WorldGen::Populate),
+        )
+        .add_systems(
+            FixedUpdate,
+            update_adversaries.run_if(in_state(GameState::Playing)),
+        )
+        .add_systems(
+            Update,
+            draw_vision_cones.run_if(in_state(GameState::Playing)),
+        )
+        .add_observer(reset_adversaries);
     }
 }
 
@@ -145,6 +155,7 @@ fn spawn_adversaries(
                 // Per-adversary RNG so each wanders independently but reproducibly.
                 rng: SmallRng::seed_from_u64(run_seed.derive_indexed("adversary", i)),
             },
+            DespawnOnExit(InGame),
             Name::new(format!("Adversary {i}")),
         ));
     }

@@ -9,6 +9,7 @@ use rand::{Rng, SeedableRng};
 use crate::coins::{Coin, CoinScore};
 use crate::dungeon::{DungeonMap, SpawnPoint};
 use crate::seed::RunSeed;
+use crate::state::{GameState, InGame, WorldGen};
 
 /// Don't place props within this tile radius of the player's spawn.
 const SPAWN_CLEARANCE: i32 = 2;
@@ -62,9 +63,12 @@ pub struct PropsPlugin;
 
 impl Plugin for PropsPlugin {
     fn build(&self, app: &mut App) {
-        // PostStartup so the dungeon map and spawn point already exist.
-        app.add_systems(PostStartup, scatter_props)
-            .add_systems(Update, spin_props);
+        // Scattered during the world build, after the dungeon map exists.
+        app.add_systems(
+            OnEnter(GameState::Loading),
+            scatter_props.in_set(WorldGen::Populate),
+        )
+        .add_systems(Update, spin_props.run_if(in_state(GameState::Playing)));
     }
 }
 
@@ -76,6 +80,10 @@ fn scatter_props(
     mut score: ResMut<CoinScore>,
     run_seed: Res<RunSeed>,
 ) {
+    // A fresh level starts with an empty tally; coins re-add to `total` below.
+    score.collected = 0;
+    score.total = 0;
+
     let mut rng = SmallRng::seed_from_u64(run_seed.derive("props"));
 
     // Preload each prop scene once and reuse the handle.
@@ -122,6 +130,7 @@ fn scatter_props(
 
             let mut entity = commands.spawn((
                 SceneRoot(handle.clone()),
+                DespawnOnExit(InGame),
                 Name::new(format!("{} ({x},{y})", kind.asset)),
             ));
 

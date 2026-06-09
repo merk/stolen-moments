@@ -5,6 +5,7 @@ use noise::{NoiseFn, Perlin};
 use std::collections::VecDeque;
 
 use crate::seed::RunSeed;
+use crate::state::{GameState, InGame, WorldGen};
 
 /// Grid dimensions (in tiles).
 pub const MAP_WIDTH: usize = 48;
@@ -93,7 +94,11 @@ pub struct DungeonPlugin;
 
 impl Plugin for DungeonPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, generate_dungeon);
+        // Built on entering Loading, before the systems that populate the map.
+        app.add_systems(
+            OnEnter(GameState::Loading),
+            generate_dungeon.in_set(WorldGen::Terrain),
+        );
     }
 }
 
@@ -300,6 +305,7 @@ fn spawn_tiles(map: &DungeonMap, commands: &mut Commands, asset_server: &AssetSe
                     commands.spawn((
                         SceneRoot(floor_scene.clone()),
                         Transform::from_translation(pos),
+                        DespawnOnExit(InGame),
                         Name::new(format!("Floor ({x},{y})")),
                     ));
                 }
@@ -307,6 +313,7 @@ fn spawn_tiles(map: &DungeonMap, commands: &mut Commands, asset_server: &AssetSe
                     commands.spawn((
                         SceneRoot(wall_scene.clone()),
                         Transform::from_translation(pos),
+                        DespawnOnExit(InGame),
                         Name::new(format!("Wall ({x},{y})")),
                     ));
                 }

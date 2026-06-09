@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 
 use crate::player::Player;
+use crate::state::{GameState, InGame};
 use crate::time_loop::{Ghost, LoopReset};
 
 /// Marks a coin prop the player can pick up.
@@ -32,8 +33,11 @@ pub struct CoinsPlugin;
 impl Plugin for CoinsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CoinScore>()
-            .add_systems(Startup, spawn_hud)
-            .add_systems(Update, (collect_coins, update_hud))
+            .add_systems(OnEnter(GameState::Loading), spawn_hud)
+            .add_systems(
+                Update,
+                (collect_coins, update_hud).run_if(in_state(GameState::Playing)),
+            )
             .add_observer(reset_coins);
     }
 }
@@ -102,6 +106,7 @@ fn spawn_hud(mut commands: Commands) {
             left: Val::Px(14.0),
             ..default()
         },
+        DespawnOnExit(InGame),
         CoinCounterText,
     ));
 }

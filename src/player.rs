@@ -4,6 +4,7 @@ use bevy::prelude::*;
 
 use crate::camera::CameraTarget;
 use crate::dungeon::{DungeonMap, SpawnPoint};
+use crate::state::{GameState, InGame, WorldGen};
 
 const MOVE_SPEED: f32 = 5.0;
 
@@ -20,9 +21,12 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        // PostStartup so the dungeon (and SpawnPoint) already exist.
-        app.add_systems(PostStartup, spawn_player)
-            .add_systems(Update, move_player);
+        // Spawned during the world build, after the dungeon (and SpawnPoint).
+        app.add_systems(
+            OnEnter(GameState::Loading),
+            spawn_player.in_set(WorldGen::Populate),
+        )
+        .add_systems(Update, move_player.run_if(in_state(GameState::Playing)));
     }
 }
 
@@ -35,6 +39,7 @@ fn spawn_player(mut commands: Commands, asset_server: Res<AssetServer>, spawn: R
         Transform::from_translation(spawn.world),
         Player,
         CameraTarget,
+        DespawnOnExit(InGame),
         Name::new("Player"),
     ));
 }

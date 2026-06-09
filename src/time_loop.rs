@@ -12,6 +12,7 @@ use bevy::scene::SceneInstanceReady;
 
 use crate::dungeon::SpawnPoint;
 use crate::player::Player;
+use crate::state::{GameState, InGame};
 
 /// How transparent ghost characters are rendered (0 = invisible, 1 = solid).
 const GHOST_ALPHA: f32 = 0.35;
@@ -79,6 +80,8 @@ impl Plugin for TimeLoopPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LoopState>()
             .add_systems(Startup, load_ghost_scene)
+            // A fresh level starts with no banked runs and a zeroed clock.
+            .add_systems(OnEnter(GameState::Loading), reset_loop_state)
             .add_systems(
                 Update,
                 (
@@ -87,7 +90,8 @@ impl Plugin for TimeLoopPlugin {
                     playback_ghosts,
                     draw_ghost_trails,
                 )
-                    .chain(),
+                    .chain()
+                    .run_if(in_state(GameState::Playing)),
             );
     }
 }
@@ -95,6 +99,15 @@ impl Plugin for TimeLoopPlugin {
 fn load_ghost_scene(mut state: ResMut<LoopState>, asset_server: Res<AssetServer>) {
     state.character = asset_server
         .load(GltfAssetLabel::Scene(0).from_asset("Models/GLB format/character-human.glb"));
+}
+
+/// Wipe banked recordings and the loop clock when a new level is built, so a
+/// fresh game (or a return to the menu and back) starts with no ghosts. The
+/// reused character handle is left intact.
+fn reset_loop_state(mut state: ResMut<LoopState>) {
+    state.elapsed = 0.0;
+    state.current.clear();
+    state.banked.clear();
 }
 
 /// On Shift+R: bank the current loop, reset the player and timer, and respawn a
@@ -177,6 +190,7 @@ fn spawn_ghost(
                 color,
                 loop_index,
             },
+            DespawnOnExit(InGame),
             Name::new("Ghost"),
         ))
         // Once the scene's meshes exist, swap their materials for transparent

@@ -3,6 +3,8 @@
 use bevy::camera::ScalingMode;
 use bevy::prelude::*;
 
+use crate::state::GameState;
+
 /// Offset of the camera from its follow target. The (equal X/Z, larger Y)
 /// vector gives the classic 3/4 isometric viewing angle.
 pub const CAMERA_OFFSET: Vec3 = Vec3::new(12.0, 16.0, 12.0);
@@ -28,7 +30,7 @@ pub struct IsoCameraPlugin;
 impl Plugin for IsoCameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_camera)
-            .add_systems(Update, follow_target);
+            .add_systems(Update, follow_target.run_if(in_state(GameState::Playing)));
     }
 }
 

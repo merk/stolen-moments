@@ -9,6 +9,7 @@ mod dungeon;
 mod player;
 mod props;
 mod seed;
+mod state;
 mod time_loop;
 mod wasm_compat;
 
@@ -34,6 +35,7 @@ fn main() {
             ..default()
         })
         .add_plugins((
+            state::StatePlugin,
             seed::SeedPlugin,
             dungeon::DungeonPlugin,
             camera::IsoCameraPlugin,
