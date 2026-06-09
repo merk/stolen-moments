@@ -7,17 +7,15 @@
 //! - **F4** — toggle adversary vision cones
 //! - **F5** — toggle the top-down tile floorplan overlay
 //! - **F6** — force-close the current loop (same as Shift+R)
-//! - **F7** — toggle a free-fly camera (pan with IJKL, raise/lower with U/O)
 //!
-//! Other gameplay modules stay independent of this one: `camera.rs` and
-//! `adversary.rs` read the shared [`DebugSettings`] through `Option<Res<…>>`, so
-//! they behave normally whether or not this plugin is present.
+//! `adversary.rs` stays independent of this one: it reads the shared
+//! [`DebugSettings`] through `Option<Res<…>>`, so it behaves normally whether or
+//! not this plugin is present.
 
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
 use crate::adversary::Adversary;
-use crate::camera::IsoCamera;
 use crate::coins::Coin;
 use crate::dungeon::{DungeonMap, TILE_SIZE};
 use crate::seed::RunSeed;
@@ -26,8 +24,6 @@ use crate::time_loop::{CloseLoop, Ghost};
 
 /// Height above the floor at which the floorplan overlay is drawn.
 const MAP_OVERLAY_LIFT: f32 = 0.1;
-/// Free-fly camera pan speed (world units/sec).
-const FREE_FLY_SPEED: f32 = 14.0;
 
 /// Shared debug visualisation/behaviour flags. Owned by [`DebugPlugin`]; other
 /// modules read it via `Option<Res<DebugSettings>>` so they never hard-depend on
@@ -41,8 +37,6 @@ pub struct DebugSettings {
     pub vision_cones: bool,
     /// Draw the top-down tile floorplan overlay.
     pub map_overlay: bool,
-    /// Detach the camera from the player for free panning.
-    pub free_fly: bool,
 }
 
 impl Default for DebugSettings {
@@ -51,7 +45,6 @@ impl Default for DebugSettings {
             enabled: false,
             vision_cones: true,
             map_overlay: false,
-            free_fly: false,
         }
     }
 }
@@ -67,15 +60,7 @@ impl Plugin for DebugPlugin {
         app.init_resource::<DebugSettings>()
             .add_plugins(FrameTimeDiagnosticsPlugin::default())
             .add_systems(Startup, spawn_overlay)
-            .add_systems(
-                Update,
-                (
-                    toggle_debug,
-                    update_overlay,
-                    draw_map_overlay,
-                    free_fly_camera,
-                ),
-            );
+            .add_systems(Update, (toggle_debug, update_overlay, draw_map_overlay));
     }
 }
 
@@ -94,9 +79,6 @@ fn toggle_debug(
     }
     if keys.just_pressed(KeyCode::F5) {
         settings.map_overlay = !settings.map_overlay;
-    }
-    if keys.just_pressed(KeyCode::F7) {
-        settings.free_fly = !settings.free_fly;
     }
     // Only meaningful while a loop is actually running; guard so the message
     // can't sit buffered and close a loop the moment play (re)starts.
@@ -168,8 +150,7 @@ fn update_overlay(
          \n\
          F4 cones     {}\n\
          F5 map       {}\n\
-         F6 close loop\n\
-         F7 free-fly  {}",
+         F6 close loop",
         seed.0,
         state.get(),
         adversaries.iter().count(),
@@ -177,7 +158,6 @@ fn update_overlay(
         coins.iter().count(),
         on_off(settings.vision_cones),
         on_off(settings.map_overlay),
-        on_off(settings.free_fly),
     );
 }
 
@@ -212,51 +192,5 @@ fn draw_map_overlay(
             let centre = map.tile_to_world(x, y) + Vec3::Y * MAP_OVERLAY_LIFT;
             gizmos.rect(Isometry3d::new(centre, flat), size, color);
         }
-    }
-}
-
-/// While free-fly is on, pan the camera with IJKL (ground plane) and U/O (up /
-/// down). `camera::follow_target` yields to this by reading the same flag.
-fn free_fly_camera(
-    settings: Res<DebugSettings>,
-    time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mut camera: Query<&mut Transform, With<IsoCamera>>,
-) {
-    if !settings.free_fly {
-        return;
-    }
-    let Ok(mut cam) = camera.single_mut() else {
-        return;
-    };
-
-    // Pan relative to the fixed iso view: forward is the camera's horizontal
-    // heading, right is that rotated 90°. Mirrors the player's input mapping.
-    let offset = crate::camera::CAMERA_OFFSET;
-    let forward = Vec3::new(-offset.x, 0.0, -offset.z).normalize();
-    let right = Vec3::new(-forward.z, 0.0, forward.x);
-
-    let mut dir = Vec3::ZERO;
-    if keys.pressed(KeyCode::KeyI) {
-        dir += forward;
-    }
-    if keys.pressed(KeyCode::KeyK) {
-        dir -= forward;
-    }
-    if keys.pressed(KeyCode::KeyL) {
-        dir += right;
-    }
-    if keys.pressed(KeyCode::KeyJ) {
-        dir -= right;
-    }
-    if keys.pressed(KeyCode::KeyU) {
-        dir += Vec3::Y;
-    }
-    if keys.pressed(KeyCode::KeyO) {
-        dir -= Vec3::Y;
-    }
-
-    if dir != Vec3::ZERO {
-        cam.translation += dir.normalize() * FREE_FLY_SPEED * time.delta_secs();
     }
 }

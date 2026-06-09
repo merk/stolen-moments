@@ -50,14 +50,9 @@ fn spawn_camera(mut commands: Commands) {
 
 fn follow_target(
     time: Res<Time>,
-    debug: Option<Res<crate::debug::DebugSettings>>,
     target: Query<&Transform, (With<CameraTarget>, Without<IsoCamera>)>,
     mut camera: Query<&mut Transform, With<IsoCamera>>,
 ) {
-    // The debug free-fly camera drives the transform itself; don't fight it.
-    if debug.is_some_and(|d| d.free_fly) {
-        return;
-    }
     let Ok(target) = target.single() else {
         return;
     };

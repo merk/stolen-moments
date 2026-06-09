@@ -203,9 +203,9 @@ gameplay (Phase 3) depends on them.
 - A `DebugPlugin` behind an F3 toggle: overlay (FPS/seed/state/entity counts),
   F4 vision-cone toggle, F5 top-down floorplan overlay (the future home of the
   room-tag overlay), F6 force loop-reset (drives the new `CloseLoop` message that
-  Shift+R now also routes through), F7 free-fly camera (IJKL pan, U/O raise).
-- `camera.rs`/`adversary.rs` read a shared `DebugSettings` via `Option<Res<…>>`
-  so they stay independent of the debug plugin.
+  Shift+R now also routes through).
+- `adversary.rs` reads a shared `DebugSettings` via `Option<Res<…>>` so it stays
+  independent of the debug plugin.
 - *Deferred (need later phases):* room-tag colouring of the map overlay waits on
   P1.1's `room_of`; live in-game seed entry remains the `GAME_SEED` env override
   (logged at launch) rather than a UI field.
