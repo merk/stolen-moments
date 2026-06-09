@@ -212,7 +212,7 @@ gameplay (Phase 3) depends on them.
 
 ### Phase 1 — Structured world
 
-**P1.1 — Level source abstraction + room types** ⬜ *(TODO item 10)*
+**P1.1 — Level source abstraction + room types** ✅ *(commit `3485229`)* *(TODO item 10)*
 - Implement decision **A**: `LevelSource` trait, `Level`/`Room`/`RoomKind`,
   `HybridSource` as default, `DungeonMap.room_of`.
 - Room kinds: `Start`, `Lobby`, `GameTables`, `Vault`, `Security`, `Service`.
