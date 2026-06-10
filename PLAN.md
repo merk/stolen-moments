@@ -242,11 +242,11 @@ gameplay (Phase 3) depends on them.
 
 ### Phase 3 — Heist mechanics
 
-**P3.1 — Persistence layer** ⬜ *(TODO item 9, infra)*
+**P3.1 — Persistence layer** ✅ *(commit `290d7e7`)* *(TODO item 9, infra)*
 - Implement decision **B**: `Persistent` resource + `PersistPolicy` component;
   `LoopReset` observers honour the policy.
 
-**P3.2 — Vault + employee puzzle** ⬜ *(TODO item 11)*
+**P3.2 — Vault + employee puzzle** ✅ *(commit `290d7e7`)* *(TODO item 11)*
 - A locked Vault requiring a code. An **employee NPC** (scripted, non-reactive →
   record/replay or a simple state machine) walks a route and won't leave/reveal
   the code until a condition is met (e.g. a distraction triggered elsewhere, or
@@ -254,6 +254,10 @@ gameplay (Phase 3) depends on them.
 - Learning the code sets a `vault_code_known` fact in `Persistent`; once known,
   the player can open the vault directly in a later loop — the worked example of
   knowledge persistence.
+- *Prototype scope (settled with Tim):* the code is a **ground pickup** beside
+  the employee rather than a watch-the-employee mechanic; the vault **door
+  re-locks each loop** (`ResetEachLoop`) while the learned code persists, so
+  re-opening is instant.
 
 ### Phase 4 — Presentation & fidelity
 
