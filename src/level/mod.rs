@@ -13,7 +13,7 @@ mod render;
 mod rooms;
 mod source;
 
-pub use map::{LevelMap, RoomKind, SpawnPoint, TILE_SIZE};
+pub use map::{LevelMap, RoomKind, SpawnPoint, TILE_SIZE, Tile};
 
 use bevy::prelude::*;
 

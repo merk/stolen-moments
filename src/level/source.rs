@@ -134,6 +134,38 @@ mod tests {
     }
 
     #[test]
+    fn doorway_recorded_for_sealed_rooms_only() {
+        for seed in SEEDS {
+            let level = HybridSource.build(seed);
+            for room in level.map.rooms() {
+                if room.kind.sealed() {
+                    let door = room
+                        .doorway
+                        .unwrap_or_else(|| panic!("seed {seed}: {:?} missing doorway", room.kind));
+                    // The recorded doorway is the room's single perimeter opening.
+                    assert!(
+                        room.rect.perimeter().any(|p| p == door),
+                        "seed {seed}: {:?} doorway {door:?} not on its perimeter",
+                        room.kind
+                    );
+                    assert_eq!(
+                        level.map.get(door.0, door.1),
+                        Tile::Floor,
+                        "seed {seed}: {:?} doorway should be floor",
+                        room.kind
+                    );
+                } else {
+                    assert_eq!(
+                        room.doorway, None,
+                        "seed {seed}: open {:?} should record no doorway",
+                        room.kind
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn sealed_rooms_open_only_at_their_doorway() {
         for seed in SEEDS {
             let level = HybridSource.build(seed);

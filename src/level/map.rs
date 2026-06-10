@@ -85,6 +85,10 @@ pub struct Room {
     /// Floor member tiles tagged into `room_of` (the interior; excludes the
     /// sealed wall ring and its doorway).
     pub tiles: Vec<(usize, usize)>,
+    /// For a sealed room, the single doorway tile carved through its wall ring;
+    /// `None` for open rooms (which have no forced ring). Used to place the vault
+    /// door and reason about the room's one sanctioned entrance.
+    pub doorway: Option<(usize, usize)>,
 }
 
 /// The generated level grid, stored row-major: `tiles[y * width + x]`, with a

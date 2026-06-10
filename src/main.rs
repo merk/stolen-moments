@@ -6,13 +6,16 @@ mod adversary;
 mod camera;
 mod coins;
 mod debug;
+mod employee;
 mod level;
 mod loading;
+mod persistence;
 mod player;
 mod props;
 mod seed;
 mod state;
 mod time_loop;
+mod vault;
 mod wasm_compat;
 
 use bevy::prelude::*;
@@ -40,6 +43,7 @@ fn main() {
             state::StatePlugin,
             loading::LoadingPlugin,
             seed::SeedPlugin,
+            persistence::PersistencePlugin,
             level::LevelPlugin,
             camera::IsoCameraPlugin,
             player::PlayerPlugin,
@@ -47,6 +51,8 @@ fn main() {
             coins::CoinsPlugin,
             time_loop::TimeLoopPlugin,
             adversary::AdversaryPlugin,
+            vault::VaultPlugin,
+            employee::EmployeePlugin,
             debug::DebugPlugin,
         ))
         .add_systems(Startup, spawn_lighting)

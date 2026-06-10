@@ -120,6 +120,7 @@ fn stamp_room(
 ) -> Room {
     let rect = spec.rect;
     let mut tiles = Vec::new();
+    let mut doorway = None;
 
     if spec.kind.sealed() {
         // Interior becomes floor (and the room's tagged tiles).
@@ -141,6 +142,7 @@ fn stamp_room(
         map.set(dx, dy, Tile::Floor);
         protected[dy * MAP_WIDTH + dx] = false;
         map.set(ax, ay, Tile::Floor);
+        doorway = Some((dx, dy));
     } else {
         for (x, y) in rect.all_tiles() {
             map.set(x, y, Tile::Floor);
@@ -152,6 +154,7 @@ fn stamp_room(
         kind: spec.kind,
         rect,
         tiles,
+        doorway,
     }
 }
 
