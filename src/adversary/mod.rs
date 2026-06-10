@@ -11,12 +11,15 @@
 //! is a pure function of the seed and the FixedUpdate tick count, so a guard's
 //! routes, sweeps, and interest build-up replay identically on every loop.
 //!
-//! This file is the feature's header: the [`Adversary`] component, its tuning
-//! constants, and the plugin wiring. The implementation lives in submodules —
-//! [`spawn`] (placement), [`behaviour`] (the per-tick brain), [`cone`] (the
-//! vision gizmo), and the pure helpers [`path`] (grid routing) and [`vision`]
-//! (sensing). Those submodules read [`Adversary`]'s private fields directly, as
-//! descendants of this module; the rest of the crate sees only an opaque marker.
+//! This file is the feature's header: the guard components, their tuning
+//! constants, and the plugin wiring. A guard is an [`Adversary`] marker plus
+//! small single-purpose components — [`Vision`] (the swept cone), [`Awareness`]
+//! (suspicion/chase state), [`Navigation`] (route progress), and [`Post`] (the
+//! spawn snapshot it resets to) — with [`PatrolRoute`] or [`Wander`] added only
+//! for the kinds that need them, so a guard's *kind* is expressed by which
+//! components it carries. The implementation lives in submodules: [`spawn`]
+//! (placement), [`behaviour`] (the per-tick brain), [`cone`] (the vision gizmo),
+//! and the pure helpers [`path`] (grid routing) and [`vision`] (sensing).
 
 mod behaviour;
 mod cone;
@@ -80,7 +83,9 @@ const REPATH_INTERVAL: f32 = 0.3;
 /// Height above the floor at which the cone gizmo is drawn (avoids z-fighting).
 const CONE_LIFT: f32 = 0.08;
 
-/// How a guard behaves while it hasn't yet locked onto a target.
+/// How a guard behaves while it hasn't yet locked onto a target. Used only at
+/// spawn to drive appearance and which behaviour components to attach; the
+/// running guard's kind is then encoded by those components.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum GuardKind {
     /// Holds a fixed post, sweeping its cone; only moves once roused to chase,
@@ -112,6 +117,7 @@ impl GuardKind {
     }
 }
 
+/// Patrol vs chase — a guard's top-level state.
 #[derive(Clone, Copy, PartialEq)]
 enum Mode {
     /// Unaware: moving per the guard's kind, cone sweeping side to side.
@@ -120,19 +126,14 @@ enum Mode {
     Chase,
 }
 
+/// Marker for guard entities. The only adversary component other modules see;
+/// all behaviour state lives in the sibling components below.
 #[derive(Component)]
-pub struct Adversary {
-    kind: GuardKind,
-    mode: Mode,
-    /// Suspicion accumulated from time-in-cone; a chase begins once it crosses
-    /// [`INTEREST_THRESHOLD`].
-    interest: f32,
-    /// Spawn position, returned to whenever a time loop restarts.
-    home: Vec3,
-    /// Initial facing, restored on loop reset so each run sweeps identically.
-    spawn_heading: Vec3,
-    /// Initial sweep phase, restored on loop reset for the same reason.
-    spawn_sweep_phase: f32,
+pub struct Adversary;
+
+/// Where a guard is looking: the swept vision cone.
+#[derive(Component)]
+struct Vision {
     /// Base facing (normalised, horizontal). While patrolling the cone sweeps
     /// around this; it tracks the current movement direction.
     heading: Vec3,
@@ -141,18 +142,49 @@ pub struct Adversary {
     look_dir: Vec3,
     /// Phase of the patrol sweep oscillation.
     sweep_phase: f32,
+}
+
+/// A guard's suspicion: whether it's patrolling or chasing, how much interest a
+/// visible target has banked, and where that target was last seen.
+#[derive(Component)]
+struct Awareness {
+    mode: Mode,
+    /// Interest accrued from time-in-cone; a chase begins once it crosses
+    /// [`INTEREST_THRESHOLD`].
+    interest: f32,
     /// Where the target was last seen; the chase destination.
     last_seen: Vec3,
-    /// Counts down to the next chase re-path.
-    repath_timer: f32,
+}
+
+/// Progress along the current BFS route.
+#[derive(Component, Default)]
+struct Navigation {
     /// Tile waypoints currently being followed.
     path: Vec<(usize, usize)>,
-    path_index: usize,
-    /// Fixed patrol loop (patrolling guards only); cycled by `patrol_index`.
-    patrol: Vec<(usize, usize)>,
-    patrol_index: usize,
-    rng: SmallRng,
+    index: usize,
+    /// Counts down to the next chase re-path.
+    repath_timer: f32,
 }
+
+/// A guard's spawn snapshot: the post it returns to and the facing/sweep it
+/// restores on every loop reset, so each run replays identically.
+#[derive(Component)]
+struct Post {
+    home: Vec3,
+    heading: Vec3,
+    sweep_phase: f32,
+}
+
+/// A patrolling guard's fixed route (absent on static/wandering guards).
+#[derive(Component)]
+struct PatrolRoute {
+    waypoints: Vec<(usize, usize)>,
+    index: usize,
+}
+
+/// A wandering guard's private RNG for picking roam targets (absent on others).
+#[derive(Component)]
+struct Wander(SmallRng);
 
 pub struct AdversaryPlugin;
 

@@ -14,7 +14,10 @@ use crate::seed::RunSeed;
 use crate::state::InGame;
 
 use super::path::random_walkable;
-use super::{Adversary, GUARD_KINDS, GuardKind, Mode, PATROL_WAYPOINTS, SPAWN_CLEARANCE};
+use super::{
+    Adversary, Awareness, GUARD_KINDS, GuardKind, Mode, Navigation, PATROL_WAYPOINTS, PatrolRoute,
+    Post, SPAWN_CLEARANCE, Vision, Wander,
+};
 
 pub(super) fn spawn_adversaries(
     mut commands: Commands,
@@ -54,48 +57,57 @@ pub(super) fn spawn_adversaries(
             GuardKind::Patrolling | GuardKind::Wandering => far_tile(&map, &mut rng, sx, sy),
         };
 
-        // Patrolling guards get a fixed route off their own seeded stream, so the
-        // loop is stable across runs and doesn't perturb the wander stream.
-        let patrol = if kind == GuardKind::Patrolling {
-            let mut route_rng =
-                SmallRng::seed_from_u64(run_seed.derive_indexed("adversary.patrol", i));
-            patrol_route(&map, &mut route_rng, tile)
-        } else {
-            Vec::new()
-        };
-
         let world = map.tile_to_world(tile.0, tile.1);
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
         let heading = Vec3::new(angle.cos(), 0.0, angle.sin());
         let sweep_phase = rng.gen_range(0.0..std::f32::consts::TAU);
 
-        commands.spawn((
+        let mut entity = commands.spawn((
+            Adversary,
             SceneRoot(scene.clone()),
             Transform::from_translation(world)
                 .with_scale(Vec3::splat(kind.scale()))
                 .looking_to(-heading, Vec3::Y),
-            Adversary {
-                kind,
-                mode: Mode::Patrol,
-                interest: 0.0,
-                home: world,
-                spawn_heading: heading,
-                spawn_sweep_phase: sweep_phase,
+            Vision {
                 heading,
                 look_dir: heading,
                 sweep_phase,
+            },
+            Awareness {
+                mode: Mode::Patrol,
+                interest: 0.0,
                 last_seen: world,
-                repath_timer: 0.0,
-                path: Vec::new(),
-                path_index: 0,
-                patrol,
-                patrol_index: 0,
-                // Per-guard RNG so wandering routes are independent yet reproducible.
-                rng: SmallRng::seed_from_u64(run_seed.derive_indexed("adversary", i)),
+            },
+            Navigation::default(),
+            Post {
+                home: world,
+                heading,
+                sweep_phase,
             },
             DespawnOnExit(InGame),
             Name::new(format!("Adversary {i} ({})", kind.label())),
         ));
+
+        // Kind-specific state: only patrolling guards carry a route, only
+        // wandering guards carry an RNG. Static guards need neither.
+        match kind {
+            GuardKind::Patrolling => {
+                // Off its own seeded stream, so the loop is stable across runs
+                // and doesn't perturb the placement stream.
+                let mut route_rng =
+                    SmallRng::seed_from_u64(run_seed.derive_indexed("adversary.patrol", i));
+                entity.insert(PatrolRoute {
+                    waypoints: patrol_route(&map, &mut route_rng, tile),
+                    index: 0,
+                });
+            }
+            GuardKind::Wandering => {
+                entity.insert(Wander(SmallRng::seed_from_u64(
+                    run_seed.derive_indexed("adversary", i),
+                )));
+            }
+            GuardKind::Static => {}
+        }
     }
 }
 
