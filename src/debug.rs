@@ -27,7 +27,7 @@ const MAP_OVERLAY_LIFT: f32 = 0.1;
 
 /// Shared debug visualisation/behaviour flags. Owned by [`DebugPlugin`]; other
 /// modules read it via `Option<Res<DebugSettings>>` so they never hard-depend on
-/// debug tooling. Defaults match normal play (cones on, everything else off).
+/// debug tooling. Defaults: overlay panel off, vision cones and map overlay on.
 #[derive(Resource)]
 pub struct DebugSettings {
     /// Whether the overlay text panel is shown.
@@ -35,7 +35,7 @@ pub struct DebugSettings {
     /// Draw adversary vision cones. On by default — they're gameplay-relevant,
     /// not purely diagnostic — but F4 can hide them to declutter.
     pub vision_cones: bool,
-    /// Draw the top-down tile floorplan overlay.
+    /// Draw the top-down tile floorplan overlay. On by default; F5 hides it.
     pub map_overlay: bool,
 }
 
@@ -44,7 +44,7 @@ impl Default for DebugSettings {
         Self {
             enabled: false,
             vision_cones: true,
-            map_overlay: false,
+            map_overlay: true,
         }
     }
 }
