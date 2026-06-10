@@ -225,7 +225,7 @@ gameplay (Phase 3) depends on them.
 
 ### Phase 2 — Adversary variety
 
-**P2.1 — Adversary kinds** ⬜ *(TODO item 4)*
+**P2.1 — Adversary kinds** ✅ *(TODO item 4)*
 - Refactor `Adversary` so behaviour is data-driven by a `kind`, all RNG seeded
   per decision C:
   - **Static guard** — fixed post, cone sweeps; doesn't move until an *interest
