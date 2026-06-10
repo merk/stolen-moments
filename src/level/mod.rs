@@ -7,7 +7,7 @@
 //! map/spawn resources, and spawns the tile meshes.
 
 mod connect;
-mod map;
+pub(crate) mod map;
 mod noise;
 mod render;
 mod rooms;
