@@ -7,15 +7,20 @@
 //! - **F4** — toggle adversary vision cones
 //! - **F5** — toggle the top-down tile floorplan overlay
 //! - **F6** — force-close the current loop (same as Shift+R)
+//! - **F7** — toggle adversary attention meters
+//! - **F8** — cycle what a catch does (discard run / bank ghost / game over)
+//! - **F9** — toggle the player's grab meter
 //!
-//! `adversary.rs` stays independent of this one: it reads the shared
-//! [`DebugSettings`] through `Option<Res<…>>`, so it behaves normally whether or
-//! not this plugin is present.
+//! This plugin only ever *writes* the dev-control flags that gameplay reads —
+//! [`AdversaryGizmos`] and [`CatchConfig`] are owned by the modules that act on
+//! them, so those modules never depend on this tooling. Pull `DebugPlugin` and
+//! the game still runs on the flags' defaults.
 
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
-use crate::adversary::Adversary;
+use crate::adversary::{Adversary, AdversaryGizmos};
+use crate::catch::{CatchConfig, Caught};
 use crate::coins::Coin;
 use crate::level::{LevelMap, RoomKind, TILE_SIZE};
 use crate::seed::RunSeed;
@@ -25,16 +30,14 @@ use crate::time_loop::{CloseLoop, Ghost};
 /// Height above the floor at which the floorplan overlay is drawn.
 const MAP_OVERLAY_LIFT: f32 = 0.1;
 
-/// Shared debug visualisation/behaviour flags. Owned by [`DebugPlugin`]; other
-/// modules read it via `Option<Res<DebugSettings>>` so they never hard-depend on
-/// debug tooling. Defaults: overlay panel off, vision cones and map overlay on.
+/// This plugin's own flags: the overlay panel and the debug-only floorplan it
+/// draws itself. Flags that *gameplay* reads live with the modules that own them
+/// ([`AdversaryGizmos`], [`CatchConfig`]); this plugin writes those, it doesn't
+/// store them. Defaults: overlay panel off, map overlay on.
 #[derive(Resource)]
 pub struct DebugSettings {
     /// Whether the overlay text panel is shown.
     pub enabled: bool,
-    /// Draw adversary vision cones. On by default — they're gameplay-relevant,
-    /// not purely diagnostic — but F4 can hide them to declutter.
-    pub vision_cones: bool,
     /// Draw the top-down tile floorplan overlay. On by default; F5 hides it.
     pub map_overlay: bool,
 }
@@ -43,7 +46,6 @@ impl Default for DebugSettings {
     fn default() -> Self {
         Self {
             enabled: false,
-            vision_cones: true,
             map_overlay: true,
         }
     }
@@ -64,18 +66,22 @@ impl Plugin for DebugPlugin {
     }
 }
 
-/// Read the debug hotkeys and flip the matching flags.
+/// Read the debug hotkeys and flip the matching flags. The gizmo/catch flags
+/// live on the gameplay modules' resources; this is the only writer of them.
+#[allow(clippy::too_many_arguments)]
 fn toggle_debug(
     keys: Res<ButtonInput<KeyCode>>,
     state: Res<State<GameState>>,
     mut settings: ResMut<DebugSettings>,
+    mut gizmos: ResMut<AdversaryGizmos>,
+    mut catch: ResMut<CatchConfig>,
     mut close: MessageWriter<CloseLoop>,
 ) {
     if keys.just_pressed(KeyCode::F3) {
         settings.enabled = !settings.enabled;
     }
     if keys.just_pressed(KeyCode::F4) {
-        settings.vision_cones = !settings.vision_cones;
+        gizmos.vision_cones = !gizmos.vision_cones;
     }
     if keys.just_pressed(KeyCode::F5) {
         settings.map_overlay = !settings.map_overlay;
@@ -83,7 +89,16 @@ fn toggle_debug(
     // Only meaningful while a loop is actually running; guard so the message
     // can't sit buffered and close a loop the moment play (re)starts.
     if keys.just_pressed(KeyCode::F6) && *state.get() == GameState::Playing {
-        close.write(CloseLoop);
+        close.write(CloseLoop { bank: true });
+    }
+    if keys.just_pressed(KeyCode::F7) {
+        gizmos.attention_meters = !gizmos.attention_meters;
+    }
+    if keys.just_pressed(KeyCode::F8) {
+        catch.mode = catch.mode.next();
+    }
+    if keys.just_pressed(KeyCode::F9) {
+        catch.show_grab_meter = !catch.show_grab_meter;
     }
 }
 
@@ -113,6 +128,9 @@ fn spawn_overlay(mut commands: Commands) {
 #[allow(clippy::too_many_arguments)]
 fn update_overlay(
     settings: Res<DebugSettings>,
+    gizmos: Res<AdversaryGizmos>,
+    catch: Res<CatchConfig>,
+    caught: Res<Caught>,
     diagnostics: Res<DiagnosticsStore>,
     seed: Res<RunSeed>,
     state: Res<State<GameState>>,
@@ -147,17 +165,25 @@ fn update_overlay(
          adversaries  {}\n\
          ghosts       {}\n\
          coins        {}\n\
+         grab         {:.0}%\n\
          \n\
          F4 cones     {}\n\
          F5 map       {}\n\
-         F6 close loop",
+         F6 close loop\n\
+         F7 attention {}\n\
+         F8 on catch  {}\n\
+         F9 grab bar  {}",
         seed.0,
         state.get(),
         adversaries.iter().count(),
         ghosts.iter().count(),
         coins.iter().count(),
-        on_off(settings.vision_cones),
+        caught.progress * 100.0,
+        on_off(gizmos.vision_cones),
         on_off(settings.map_overlay),
+        on_off(gizmos.attention_meters),
+        catch.mode.label(),
+        on_off(catch.show_grab_meter),
     );
 }
 

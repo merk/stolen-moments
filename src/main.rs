@@ -4,6 +4,7 @@
 
 mod adversary;
 mod camera;
+mod catch;
 mod coins;
 mod debug;
 mod employee;
@@ -51,6 +52,7 @@ fn main() {
             coins::CoinsPlugin,
             time_loop::TimeLoopPlugin,
             adversary::AdversaryPlugin,
+            catch::CatchPlugin,
             vault::VaultPlugin,
             employee::EmployeePlugin,
             debug::DebugPlugin,

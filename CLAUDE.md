@@ -24,8 +24,9 @@ components/systems:
 | `player.rs` | `PlayerPlugin` | Player spawn + movement |
 | `props.rs` | `PropsPlugin` | Scatters barrels/rocks/chests/coins onto floor tiles |
 | `coins.rs` | `CoinsPlugin` | Coin pickup, `CoinScore`, HUD |
-| `time_loop.rs` | `TimeLoopPlugin` | Records runs, replays them as `Ghost`s, emits `LoopReset` |
+| `time_loop.rs` | `TimeLoopPlugin` | Records runs, replays them as `Ghost`s, emits `LoopReset`; `CloseLoop { bank }` restarts a loop (banking the run as a ghost, or discarding it) |
 | `adversary.rs` | `AdversaryPlugin` | Vision-cone patrol/chase AI, grid pathfinding |
+| `catch.rs` | `CatchPlugin` | A chasing guard in contact fills a grab meter; topping it out fires the configured catch (`CatchConfig`): discard the run, bank it, or game-over |
 | `wasm_compat.rs` | — | Web-only shims |
 
 The world is built on `OnEnter(GameState::Loading)` via the `WorldGen` system

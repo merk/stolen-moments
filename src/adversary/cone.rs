@@ -5,12 +5,18 @@
 use bevy::prelude::*;
 
 use super::vision::{VISION_HALF_ANGLE, VISION_RANGE, rotate_y};
-use super::{Awareness, CONE_LIFT, INTEREST_THRESHOLD, Mode, PatrolRoute, Vision, Wander};
+use super::{
+    AdversaryGizmos, Awareness, CONE_LIFT, INTEREST_THRESHOLD, Mode, PatrolRoute, Vision, Wander,
+};
 
 /// Radius of the kind ring drawn at a guard's feet (world units; tile is 1).
 const RING_RADIUS: f32 = 0.42;
 /// Segments in the ring polygon.
 const RING_SEGMENTS: usize = 20;
+
+/// Height of the floating attention meter above a guard's origin, and its span.
+const METER_BASE_LIFT: f32 = 1.4;
+const METER_HEIGHT: f32 = 0.6;
 
 /// Draw each guard's overlays: the vision cone, then the kind ring.
 ///
@@ -19,7 +25,7 @@ const RING_SEGMENTS: usize = 20;
 /// the feet coloured by kind (cool tones, distinct from the warm cone) so a
 /// patrolling guard reads apart from a wandering or static one.
 pub(super) fn draw_vision_cones(
-    debug: Option<Res<crate::debug::DebugSettings>>,
+    gizmos_cfg: Res<AdversaryGizmos>,
     adversaries: Query<(
         &Transform,
         &Vision,
@@ -29,7 +35,7 @@ pub(super) fn draw_vision_cones(
     )>,
     mut gizmos: Gizmos,
 ) {
-    if debug.is_some_and(|d| !d.vision_cones) {
+    if !gizmos_cfg.vision_cones {
         return;
     }
     const ARC_SEGMENTS: usize = 12;
@@ -55,6 +61,39 @@ pub(super) fn draw_vision_cones(
         }
 
         draw_kind_ring(&mut gizmos, origin, kind_color(patrol, wander));
+    }
+}
+
+/// Draw a floating vertical bar above each guard showing how close it is to
+/// chasing: a faint full-height track with a filled portion that rises with
+/// interest (yellow→orange) and tops out solid red the moment it locks on.
+pub(super) fn draw_attention_meters(
+    gizmos_cfg: Res<AdversaryGizmos>,
+    adversaries: Query<(&Transform, &Awareness)>,
+    mut gizmos: Gizmos,
+) {
+    if !gizmos_cfg.attention_meters {
+        return;
+    }
+    for (transform, awareness) in &adversaries {
+        let base = transform.translation + Vec3::Y * METER_BASE_LIFT;
+        let top = base + Vec3::Y * METER_HEIGHT;
+        gizmos.line(base, top, Color::srgba(0.1, 0.1, 0.1, 0.5));
+
+        let fill = attention_fraction(awareness);
+        if fill > 0.0 {
+            let filled = base + Vec3::Y * METER_HEIGHT * fill;
+            gizmos.line(base, filled, cone_color(awareness));
+        }
+    }
+}
+
+/// How full a guard's attention meter reads: saturated while chasing, otherwise
+/// the interest banked as a fraction of the chase threshold.
+fn attention_fraction(awareness: &Awareness) -> f32 {
+    match awareness.mode {
+        Mode::Chase => 1.0,
+        Mode::Patrol => (awareness.interest / INTEREST_THRESHOLD).clamp(0.0, 1.0),
     }
 }
 

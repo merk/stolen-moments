@@ -74,10 +74,15 @@ impl Ghost {
 #[derive(Event, Default)]
 pub struct LoopReset;
 
-/// Request to close the current loop — the same action as the Shift+R keybind,
-/// but as a message so tooling (the debug "force loop" key) can trigger it too.
-#[derive(Message, Default)]
-pub struct CloseLoop;
+/// Request to restart the current loop. A voluntary close (Shift+R, the debug
+/// "force loop" key) banks the run as a ghost; a catch can also request a
+/// restart that *discards* the run instead, by clearing `bank`.
+#[derive(Message, Clone, Copy)]
+pub struct CloseLoop {
+    /// Bank the just-played run as a ghost before resetting. `false` throws the
+    /// run away — used when the player is caught, so a failed run leaves no echo.
+    pub bank: bool,
+}
 
 pub struct TimeLoopPlugin;
 
@@ -122,12 +127,12 @@ fn reset_loop_state(mut state: ResMut<LoopState>) {
 fn close_loop_on_shift_r(keys: Res<ButtonInput<KeyCode>>, mut close: MessageWriter<CloseLoop>) {
     let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     if shift && keys.just_pressed(KeyCode::KeyR) {
-        close.write(CloseLoop);
+        close.write(CloseLoop { bank: true });
     }
 }
 
-/// On a [`CloseLoop`] request: bank the current loop, reset the player and timer,
-/// and respawn a ghost for every banked recording (including the one just done).
+/// On a [`CloseLoop`] request: optionally bank the current loop, reset the player
+/// and timer, and respawn a ghost for every banked recording.
 fn start_new_loop(
     mut close: MessageReader<CloseLoop>,
     mut commands: Commands,
@@ -136,13 +141,15 @@ fn start_new_loop(
     mut player: Query<&mut Transform, With<Player>>,
     spawn: Res<SpawnPoint>,
 ) {
-    // Drain the queue so a buffered request can't re-fire on a later frame.
-    if close.read().count() == 0 {
+    // Drain the queue so a buffered request can't re-fire on a later frame; the
+    // last request this frame decides whether the run is banked or discarded.
+    let Some(request) = close.read().last().copied() else {
         return;
-    }
+    };
 
-    // Bank the loop we just played (ignore an empty first frame).
-    if !state.current.is_empty() {
+    // Bank the loop we just played, unless this restart discards it (a catch) or
+    // there's nothing recorded yet (an empty first frame).
+    if request.bank && !state.current.is_empty() {
         let recording = Arc::new(std::mem::take(&mut state.current));
         state.banked.push(recording);
     }

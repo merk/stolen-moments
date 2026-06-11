@@ -32,7 +32,7 @@ use rand::rngs::SmallRng;
 
 use crate::state::{GameState, WorldGen};
 use behaviour::{reset_adversaries, update_adversaries};
-use cone::draw_vision_cones;
+use cone::{draw_attention_meters, draw_vision_cones};
 use spawn::spawn_adversaries;
 
 /// The roster of guards to spawn, by kind. One of each for now; the order also
@@ -146,14 +146,26 @@ struct Vision {
 
 /// A guard's suspicion: whether it's patrolling or chasing, how much interest a
 /// visible target has banked, and where that target was last seen.
+///
+/// Public as a component so sibling concerns can read a guard's alertness (the
+/// catch system asks [`Awareness::is_chasing`] to know when a guard has the
+/// player in its grasp); the fields stay private so its state machine is only
+/// driven from within this module.
 #[derive(Component)]
-struct Awareness {
+pub struct Awareness {
     mode: Mode,
     /// Interest accrued from time-in-cone; a chase begins once it crosses
     /// [`INTEREST_THRESHOLD`].
     interest: f32,
     /// Where the target was last seen; the chase destination.
     last_seen: Vec3,
+}
+
+impl Awareness {
+    /// True while this guard is locked onto a target and pursuing it.
+    pub fn is_chasing(&self) -> bool {
+        matches!(self.mode, Mode::Chase)
+    }
 }
 
 /// Progress along the current BFS route.
@@ -186,6 +198,27 @@ struct PatrolRoute {
 #[derive(Component)]
 struct Wander(SmallRng);
 
+/// This module's dev-control slice: which guard overlays are drawn. Owned and
+/// read here (by the gizmo systems); the `debug` plugin is the only writer, so
+/// the adversary module never depends on the debug tooling. Both default on —
+/// they're gameplay-relevant tells, not just diagnostics.
+#[derive(Resource)]
+pub struct AdversaryGizmos {
+    /// Draw each guard's swept vision cone.
+    pub vision_cones: bool,
+    /// Draw each guard's attention meter (interest → chase).
+    pub attention_meters: bool,
+}
+
+impl Default for AdversaryGizmos {
+    fn default() -> Self {
+        Self {
+            vision_cones: true,
+            attention_meters: true,
+        }
+    }
+}
+
 pub struct AdversaryPlugin;
 
 impl Plugin for AdversaryPlugin {
@@ -195,18 +228,19 @@ impl Plugin for AdversaryPlugin {
         // function of the seed and tick count, independent of frame rate — the
         // basis for guard routes repeating identically across loops. The cone
         // gizmo draws every frame in Update off the cached `look_dir`.
-        app.add_systems(
-            OnEnter(GameState::Loading),
-            spawn_adversaries.in_set(WorldGen::Populate),
-        )
-        .add_systems(
-            FixedUpdate,
-            update_adversaries.run_if(in_state(GameState::Playing)),
-        )
-        .add_systems(
-            Update,
-            draw_vision_cones.run_if(in_state(GameState::Playing)),
-        )
-        .add_observer(reset_adversaries);
+        app.init_resource::<AdversaryGizmos>()
+            .add_systems(
+                OnEnter(GameState::Loading),
+                spawn_adversaries.in_set(WorldGen::Populate),
+            )
+            .add_systems(
+                FixedUpdate,
+                update_adversaries.run_if(in_state(GameState::Playing)),
+            )
+            .add_systems(
+                Update,
+                (draw_vision_cones, draw_attention_meters).run_if(in_state(GameState::Playing)),
+            )
+            .add_observer(reset_adversaries);
     }
 }

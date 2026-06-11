@@ -24,10 +24,11 @@ pub enum GameState {
     Loading,
     Playing,
     Paused,
-    // Entered by the win/lose conditions added in a later phase (P3+); declared
-    // now so the state machine is complete, but not yet reachable or wired to UI.
-    #[allow(dead_code)]
+    /// The player was caught and the run is over. Reached from `catch` when the
+    /// catch mode is "game over"; shows a lose screen back to the menu.
     GameOver,
+    // Declared so the state machine is complete; the win condition isn't wired
+    // to gameplay yet.
     #[allow(dead_code)]
     Win,
 }
@@ -71,6 +72,7 @@ impl Plugin for StatePlugin {
             .add_systems(OnEnter(GameState::Boot), enter_main_menu)
             .add_systems(OnEnter(GameState::MainMenu), spawn_main_menu)
             .add_systems(OnEnter(GameState::Paused), spawn_pause_menu)
+            .add_systems(OnEnter(GameState::GameOver), spawn_game_over_menu)
             .add_systems(
                 Update,
                 (
@@ -139,6 +141,16 @@ fn spawn_pause_menu(mut commands: Commands) {
     commands.entity(root).with_children(|p| {
         spawn_title(p, "PAUSED");
         spawn_button(p, "Resume", MenuAction::Resume);
+        spawn_button(p, "Main Menu", MenuAction::QuitToMenu);
+    });
+}
+
+/// The lose screen shown after a guard catches the player. Leaving `InGame` has
+/// already torn the level down, so this is just the overlay back to the menu.
+fn spawn_game_over_menu(mut commands: Commands) {
+    let root = menu_overlay(&mut commands, GameState::GameOver);
+    commands.entity(root).with_children(|p| {
+        spawn_title(p, "CAUGHT");
         spawn_button(p, "Main Menu", MenuAction::QuitToMenu);
     });
 }
