@@ -6,17 +6,16 @@
 //!
 //! What a catch *costs* is selectable for tuning via [`CatchConfig`] (cycled
 //! with F8, see `debug.rs`): discard the run, bank it as a ghost anyway, or end
-//! the game. The grab meter draws as a filling red ring at the feet.
+//! the game. The grab meter draws as a red progress bar floating over the player.
 //!
 //! [`CatchConfig`] is this module's slice of dev control: it owns the knobs,
 //! reads them itself, and the `debug` plugin is the only writer — so this
 //! gameplay module never depends on the debug tooling.
 
-use std::f32::consts::TAU;
-
 use bevy::prelude::*;
 
 use crate::adversary::{Adversary, Awareness};
+use crate::billboard::{BAR_HEIGHT, BAR_WIDTH, Billboard, OverlayAssets};
 use crate::player::Player;
 use crate::state::GameState;
 use crate::time_loop::{CloseLoop, LoopReset};
@@ -31,10 +30,8 @@ const GRAB_FILL_TIME: f32 = 1.2;
 /// time, so putting distance between you and the guard is rewarded.
 const GRAB_DRAIN_TIME: f32 = 0.6;
 
-/// Feet-ring radius for the grab meter gizmo, and its lift off the floor.
-const METER_RADIUS: f32 = 0.55;
-const METER_LIFT: f32 = 0.07;
-const METER_SEGMENTS: usize = 32;
+/// Height above the player at which the grab bar floats.
+const BAR_LIFT: f32 = 2.05;
 
 /// The live player's grab meter, `0.0` (free) to `1.0` (caught). Public so the
 /// debug overlay can read it out.
@@ -102,9 +99,11 @@ impl Plugin for CatchPlugin {
             .init_resource::<CatchConfig>()
             // A freshly built level starts the player free.
             .add_systems(OnEnter(GameState::Loading), reset_caught)
+            // Attach the grab bar to the player as soon as it spawns (any state).
+            .add_systems(Update, attach_grab_bar)
             .add_systems(
                 Update,
-                (track_grab, draw_grab_meter).run_if(in_state(GameState::Playing)),
+                (track_grab, update_grab_bar).run_if(in_state(GameState::Playing)),
             )
             // A loop restart (whatever caused it) frees the player again.
             .add_observer(clear_caught_on_loop);
@@ -165,51 +164,72 @@ fn track_grab(
     }
 }
 
-/// Draw the grab meter as a red ring at the player's feet, filling clockwise
-/// from the top as the meter rises. Hidden while the meter is empty.
-fn draw_grab_meter(
-    config: Res<CatchConfig>,
-    caught: Res<Caught>,
-    player: Query<&Transform, With<Player>>,
-    mut gizmos: Gizmos,
+/// The grab bar's fill quad, X-scaled to the grab progress each frame. Its
+/// parent (the bar root) is toggled whole to show/hide the meter.
+#[derive(Component)]
+struct GrabBar;
+#[derive(Component)]
+struct GrabFill;
+
+/// Attach a floating grab bar to the player the moment it spawns: a billboard
+/// root holding a dark track and a red fill, hidden until the meter rises.
+fn attach_grab_bar(
+    mut commands: Commands,
+    assets: Option<Res<OverlayAssets>>,
+    players: Query<Entity, Added<Player>>,
 ) {
-    if !config.show_grab_meter || caught.progress <= 0.0 {
-        return;
-    }
-    let Ok(player_t) = player.single() else {
+    let Some(assets) = assets else {
         return;
     };
-    let centre = player_t.translation + Vec3::Y * METER_LIFT;
-
-    // Faint full ring as the track, then the filled portion in bright red.
-    draw_arc(
-        &mut gizmos,
-        centre,
-        TAU,
-        Color::srgba(0.5, 0.1, 0.1, 0.4),
-        METER_SEGMENTS,
-    );
-    let segs = ((METER_SEGMENTS as f32) * caught.progress).ceil().max(1.0) as usize;
-    draw_arc(
-        &mut gizmos,
-        centre,
-        TAU * caught.progress,
-        Color::srgb(1.0, 0.15, 0.1),
-        segs,
-    );
+    for player in &players {
+        let bar = commands
+            .spawn((
+                GrabBar,
+                Billboard,
+                Transform::from_xyz(0.0, BAR_LIFT, 0.0),
+                Visibility::Hidden,
+                ChildOf(player),
+                Name::new("Grab bar"),
+            ))
+            .id();
+        commands.spawn((
+            Mesh3d(assets.bar_track_mesh.clone()),
+            MeshMaterial3d(assets.bar_track_material.clone()),
+            Transform::from_scale(Vec3::new(BAR_WIDTH, BAR_HEIGHT, 1.0)),
+            ChildOf(bar),
+        ));
+        commands.spawn((
+            GrabFill,
+            Mesh3d(assets.bar_fill_mesh.clone()),
+            MeshMaterial3d(assets.bar_danger_material.clone()),
+            Transform {
+                translation: Vec3::new(-BAR_WIDTH * 0.5, 0.0, 0.01),
+                scale: Vec3::new(0.0, BAR_HEIGHT, 1.0),
+                ..default()
+            },
+            ChildOf(bar),
+        ));
+    }
 }
 
-/// Polyline an arc of `sweep` radians around `centre` on the ground plane,
-/// starting at the top (−Z) and going clockwise.
-fn draw_arc(gizmos: &mut Gizmos, centre: Vec3, sweep: f32, color: Color, segments: usize) {
-    let mut prev: Option<Vec3> = None;
-    for i in 0..=segments {
-        let angle = -std::f32::consts::FRAC_PI_2 + sweep * (i as f32 / segments as f32);
-        let point = centre + Vec3::new(angle.cos(), 0.0, angle.sin()) * METER_RADIUS;
-        if let Some(previous) = prev {
-            gizmos.line(previous, point, color);
-        }
-        prev = Some(point);
+/// Show the grab bar while the meter is filling and scale its fill to progress;
+/// hide it when empty or switched off.
+fn update_grab_bar(
+    config: Res<CatchConfig>,
+    caught: Res<Caught>,
+    mut bars: Query<&mut Visibility, With<GrabBar>>,
+    mut fills: Query<&mut Transform, With<GrabFill>>,
+) {
+    let show = config.show_grab_meter && caught.progress > 0.0;
+    for mut vis in &mut bars {
+        *vis = if show {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+    for mut transform in &mut fills {
+        transform.scale.x = BAR_WIDTH * caught.progress;
     }
 }
 

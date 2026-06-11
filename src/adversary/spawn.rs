@@ -8,11 +8,13 @@ use rand::rngs::SmallRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 
+use crate::billboard::OverlayAssets;
 use crate::level::{LevelMap, RoomKind, SpawnPoint};
 use crate::loading::LoadingAssets;
 use crate::seed::RunSeed;
 use crate::state::InGame;
 
+use super::overlay::attach_overlays;
 use super::path::random_walkable;
 use super::{
     Adversary, Awareness, GUARD_KINDS, GuardKind, Mode, Navigation, PATROL_WAYPOINTS, PatrolRoute,
@@ -23,6 +25,7 @@ pub(super) fn spawn_adversaries(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut loading: ResMut<LoadingAssets>,
+    overlays: Res<OverlayAssets>,
     map: Res<LevelMap>,
     spawn: Res<SpawnPoint>,
     run_seed: Res<RunSeed>,
@@ -77,6 +80,9 @@ pub(super) fn spawn_adversaries(
                 mode: Mode::Patrol,
                 interest: 0.0,
                 last_seen: world,
+                search_timer: 0.0,
+                search_points: Vec::new(),
+                search_step: 0,
             },
             Navigation::default(),
             Post {
@@ -87,6 +93,7 @@ pub(super) fn spawn_adversaries(
             DespawnOnExit(InGame),
             Name::new(format!("Adversary {i} ({})", kind.label())),
         ));
+        let guard = entity.id();
 
         // Kind-specific state: only patrolling guards carry a route, only
         // wandering guards carry an RNG. Static guards need neither.
@@ -108,6 +115,10 @@ pub(super) fn spawn_adversaries(
             }
             GuardKind::Static => {}
         }
+
+        // `entity`'s borrow of `commands` has ended (last used above), so it's
+        // free again to spawn the guard's overlay children.
+        attach_overlays(&mut commands, guard, &overlays);
     }
 }
 

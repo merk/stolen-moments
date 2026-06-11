@@ -42,6 +42,10 @@ touch "$OUT/.nojekyll"
 # Ship only what the game loads at runtime (GLBs embed their textures).
 mkdir -p "$OUT/assets/Models"
 cp -R "assets/Models/GLB format" "$OUT/assets/Models/"
+# The guard/player overlay emotes (Kenney emotes atlas).
+mkdir -p "$OUT/assets/kenney_emotes-pack/Spritesheets"
+cp "assets/kenney_emotes-pack/Spritesheets/pixel_style1.png" \
+   "$OUT/assets/kenney_emotes-pack/Spritesheets/"
 
 echo "==> Done. Bundle in ./$OUT"
 du -sh "$OUT"

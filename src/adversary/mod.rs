@@ -5,9 +5,16 @@
 //! **patrolling** guard walks a fixed seeded route, and a **wandering** guard
 //! roams to random tiles. All three share one sensing model: a vision cone
 //! sweeps side to side, and a target lingering inside it (within range, with
-//! clear line of sight) fills a per-guard **interest** meter. Crossing the
-//! interest threshold trips the guard into a chase toward the target's
-//! last-known position; brief or distant exposure decays harmlessly. Everything
+//! clear line of sight) fills a per-guard **interest** meter. The instant a
+//! target banks interest the cone locks onto it and the guard halts to stare it
+//! down, so the sighting builds rather than slipping past the sweep. Crossing
+//! the interest threshold trips the guard into a chase toward the target's
+//! last-known position; brief or distant exposure decays harmlessly. A guard
+//! that loses its quarry mid-chase doesn't forget instantly — it drops into an
+//! alarmed **search**, sweeping wider and faster while investigating tiles
+//! around the last-seen spot and holding a baseline of interest, so a glimpse
+//! snaps it straight back into the chase before it eventually stands down.
+//! Everything
 //! is a pure function of the seed and the FixedUpdate tick count, so a guard's
 //! routes, sweeps, and interest build-up replay identically on every loop.
 //!
@@ -23,6 +30,7 @@
 
 mod behaviour;
 mod cone;
+mod overlay;
 mod path;
 mod spawn;
 mod vision;
@@ -32,7 +40,8 @@ use rand::rngs::SmallRng;
 
 use crate::state::{GameState, WorldGen};
 use behaviour::{reset_adversaries, update_adversaries};
-use cone::{draw_attention_meters, draw_vision_cones};
+use cone::draw_vision_cones;
+use overlay::update_guard_overlays;
 use spawn::spawn_adversaries;
 
 /// The roster of guards to spawn, by kind. One of each for now; the order also
@@ -62,8 +71,26 @@ const SWEEP_AMPLITUDE: f32 = 0.9;
 /// Angular speed of the sweep oscillation (radians/sec of phase).
 const SWEEP_SPEED: f32 = 1.6;
 
-/// Interest needed to trip a guard from patrol into a chase.
-const INTEREST_THRESHOLD: f32 = 1.0;
+/// Cone sweep while searching — wider and faster than the patrol sweep, to sweep
+/// more ground hunting for a target that just slipped out of sight.
+const SEARCH_SWEEP_AMPLITUDE: f32 = 1.3;
+const SEARCH_SWEEP_SPEED: f32 = 2.6;
+/// Move speed while searching: faster than an unaware patrol, slower than a
+/// committed chase.
+const SEARCH_SPEED: f32 = 3.4;
+/// Seconds a guard hunts a lost target before standing down to patrol.
+const SEARCH_DURATION: f32 = 6.0;
+/// Baseline interest a guard holds while alarmed/searching, so re-spotting the
+/// target trips a chase almost immediately rather than rebuilding from zero.
+const SEARCH_INTEREST_FLOOR: f32 = 0.3;
+/// Tiles out from the last-seen position a searching guard will investigate.
+const SEARCH_RING_RADIUS: i32 = 3;
+
+/// Interest needed to trip a guard from patrol into a chase. Low, because the
+/// cone now locks onto a target the instant it banks any interest (see the
+/// patrol look-direction in `behaviour`), so a target caught in the cone is
+/// tracked and roused into a chase quickly rather than slipping past the sweep.
+const INTEREST_THRESHOLD: f32 = 0.5;
 /// Interest gained per second with a target dead-centre and point-blank; scaled
 /// down with distance by [`INTEREST_MIN_FACTOR`] so far sightings build slowly.
 const INTEREST_GAIN: f32 = 1.6;
@@ -117,13 +144,17 @@ impl GuardKind {
     }
 }
 
-/// Patrol vs chase — a guard's top-level state.
+/// A guard's top-level alertness state.
 #[derive(Clone, Copy, PartialEq)]
 enum Mode {
     /// Unaware: moving per the guard's kind, cone sweeping side to side.
     Patrol,
     /// Locked onto a target, pathing toward its last-seen position.
     Chase,
+    /// Alarmed: lost the target but still hunting — sweeping a wider, faster
+    /// cone while investigating tiles around where it was last seen, holding a
+    /// baseline of interest so a re-sighting snaps straight back into a chase.
+    Search,
 }
 
 /// Marker for guard entities. The only adversary component other modules see;
@@ -155,10 +186,20 @@ struct Vision {
 pub struct Awareness {
     mode: Mode,
     /// Interest accrued from time-in-cone; a chase begins once it crosses
-    /// [`INTEREST_THRESHOLD`].
+    /// [`INTEREST_THRESHOLD`]. While searching it holds at
+    /// [`SEARCH_INTEREST_FLOOR`] rather than draining to zero.
     interest: f32,
-    /// Where the target was last seen; the chase destination.
+    /// Where the target was last seen; the chase destination and the centre of
+    /// the search.
     last_seen: Vec3,
+    /// Counts down while searching; on reaching zero the guard stands down to
+    /// patrol. Unused outside [`Mode::Search`].
+    search_timer: f32,
+    /// Deterministic ring of tiles to investigate around `last_seen` while
+    /// searching, with `search_step` the next index into it. Recomputed on
+    /// entering a search so the pattern replays identically across loops.
+    search_points: Vec<(usize, usize)>,
+    search_step: usize,
 }
 
 impl Awareness {
@@ -206,7 +247,8 @@ struct Wander(SmallRng);
 pub struct AdversaryGizmos {
     /// Draw each guard's swept vision cone.
     pub vision_cones: bool,
-    /// Draw each guard's attention meter (interest → chase).
+    /// Show each guard's floating state overlays — the emote (`?`/dots/`!`) and
+    /// the attention bar that fills as a sighting builds toward a chase.
     pub attention_meters: bool,
 }
 
@@ -239,7 +281,7 @@ impl Plugin for AdversaryPlugin {
             )
             .add_systems(
                 Update,
-                (draw_vision_cones, draw_attention_meters).run_if(in_state(GameState::Playing)),
+                (draw_vision_cones, update_guard_overlays).run_if(in_state(GameState::Playing)),
             )
             .add_observer(reset_adversaries);
     }

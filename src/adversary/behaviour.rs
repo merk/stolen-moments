@@ -8,12 +8,14 @@ use crate::level::LevelMap;
 use crate::player::Player;
 use crate::time_loop::{Ghost, LoopReset};
 
-use super::path::{bfs_path, random_walkable};
+use super::path::{bfs_path, random_walkable, search_ring};
 use super::vision::{VISION_RANGE, first_visible, horizontal, rotate_y};
 use super::{
     Adversary, Awareness, CHASE_SPEED, INTEREST_DECAY, INTEREST_GAIN, INTEREST_MAX,
     INTEREST_MIN_FACTOR, INTEREST_THRESHOLD, Mode, Navigation, PATROL_SPEED, PatrolRoute, Post,
-    REPATH_INTERVAL, SWEEP_AMPLITUDE, SWEEP_SPEED, TURN_SPEED, Vision, WAYPOINT_RADIUS, Wander,
+    REPATH_INTERVAL, SEARCH_DURATION, SEARCH_INTEREST_FLOOR, SEARCH_RING_RADIUS, SEARCH_SPEED,
+    SEARCH_SWEEP_AMPLITUDE, SEARCH_SWEEP_SPEED, SWEEP_AMPLITUDE, SWEEP_SPEED, TURN_SPEED, Vision,
+    WAYPOINT_RADIUS, Wander,
 };
 
 /// On a loop restart, send every guard back to its post and restore its full
@@ -40,6 +42,9 @@ pub(super) fn reset_adversaries(
         awareness.mode = Mode::Patrol;
         awareness.interest = 0.0;
         awareness.last_seen = post.home;
+        awareness.search_timer = 0.0;
+        awareness.search_points.clear();
+        awareness.search_step = 0;
         *nav = Navigation::default();
         if let Some(mut route) = route {
             route.index = 0;
@@ -92,16 +97,33 @@ pub(super) fn update_adversaries(
             continue;
         };
 
-        // 1. Work out where the cone is pointing this frame.
-        vision.sweep_phase += SWEEP_SPEED * dt;
+        // 1. Work out where the cone is pointing this frame. While searching the
+        // sweep is wider and quicker, to cover more ground hunting a lost target.
+        let (sweep_amp, sweep_speed) = if awareness.mode == Mode::Search {
+            (SEARCH_SWEEP_AMPLITUDE, SEARCH_SWEEP_SPEED)
+        } else {
+            (SWEEP_AMPLITUDE, SWEEP_SPEED)
+        };
+        vision.sweep_phase += sweep_speed * dt;
         let look_dir = match awareness.mode {
-            Mode::Patrol => {
-                let swing = vision.sweep_phase.sin() * SWEEP_AMPLITUDE;
-                rotate_y(vision.heading, swing)
-            }
             Mode::Chase => {
                 let to = horizontal(awareness.last_seen - pos);
                 to.normalize_or(vision.look_dir)
+            }
+            // Patrol or Search. The moment interest rises above the mode's
+            // resting baseline the guard is actively eyeing a target, so lock
+            // the cone onto its last-seen position to track it while suspicion
+            // climbs — rather than sweeping past and dropping the sighting. The
+            // sweep phase keeps advancing underneath, so once interest settles
+            // back the cone resumes its deterministic side-to-side sweep.
+            _ if awareness.interest > resting_interest(awareness.mode) => {
+                let to = horizontal(awareness.last_seen - pos);
+                let swing = vision.sweep_phase.sin() * sweep_amp;
+                to.normalize_or(rotate_y(vision.heading, swing))
+            }
+            _ => {
+                let swing = vision.sweep_phase.sin() * sweep_amp;
+                rotate_y(vision.heading, swing)
             }
         };
         vision.look_dir = look_dir;
@@ -122,8 +144,10 @@ pub(super) fn update_adversaries(
 
                 if spotted.is_some() && awareness.interest >= INTEREST_THRESHOLD {
                     enter_chase(&map, &mut awareness, &mut nav, here);
-                } else if nav.index >= nav.path.len() {
-                    // Idle (reached the current goal) — pick the next per kind.
+                } else if awareness.interest <= 0.0 && nav.index >= nav.path.len() {
+                    // Idle (reached the current goal) and not eyeing anyone —
+                    // pick the next destination per kind. While interest is
+                    // banked the guard holds instead (see the movement step).
                     next_patrol_goal(&map, here, &mut nav, post, patrol, wander);
                 }
             }
@@ -133,11 +157,9 @@ pub(super) fn update_adversaries(
                 }
                 let arrived = nav.index >= nav.path.len();
                 if spotted.is_none() && arrived {
-                    // Lost them and reached where they were — back to patrol.
-                    awareness.mode = Mode::Patrol;
-                    awareness.interest = 0.0;
-                    nav.path.clear();
-                    nav.index = 0;
+                    // Lost them and reached where they were — don't forget
+                    // instantly; drop into an alarmed search around the spot.
+                    enter_search(&map, &mut awareness, &mut nav, here);
                 } else {
                     nav.repath_timer -= dt;
                     if nav.repath_timer <= 0.0 {
@@ -148,15 +170,48 @@ pub(super) fn update_adversaries(
                     }
                 }
             }
+            Mode::Search => {
+                awareness.search_timer -= dt;
+                if let Some(target) = spotted {
+                    awareness.last_seen = target;
+                    awareness.interest =
+                        (awareness.interest + interest_gain(pos, target) * dt).min(INTEREST_MAX);
+                } else {
+                    // Hold the alarmed baseline rather than draining to zero, so
+                    // a glimpse re-trips a chase almost immediately.
+                    awareness.interest =
+                        (awareness.interest - INTEREST_DECAY * dt).max(SEARCH_INTEREST_FLOOR);
+                }
+
+                if spotted.is_some() && awareness.interest >= INTEREST_THRESHOLD {
+                    enter_chase(&map, &mut awareness, &mut nav, here);
+                } else if awareness.search_timer <= 0.0 {
+                    // Gave up the hunt — stand down to a normal patrol.
+                    awareness.mode = Mode::Patrol;
+                    awareness.interest = 0.0;
+                    nav.path.clear();
+                    nav.index = 0;
+                } else if spotted.is_none() && nav.index >= nav.path.len() {
+                    // Reached an investigate tile — move on to the next.
+                    next_search_goal(&map, here, &mut awareness, &mut nav);
+                }
+            }
         }
 
-        // 4. Advance along the current path.
-        let speed = if awareness.mode == Mode::Chase {
-            CHASE_SPEED
-        } else {
-            PATROL_SPEED
+        // 4. Advance along the current path — unless pinned. A guard actively
+        // eyeing a target (interest above its mode's baseline, while not yet
+        // committed to a chase) halts and stares it down while the cone tracks
+        // it (step 1) and suspicion climbs — for any kind — rather than walking
+        // its route or search back out of range and dropping the sighting. Once
+        // interest settles it resumes movement from where it froze.
+        let pinned =
+            awareness.mode != Mode::Chase && awareness.interest > resting_interest(awareness.mode);
+        let speed = match awareness.mode {
+            Mode::Chase => CHASE_SPEED,
+            Mode::Search => SEARCH_SPEED,
+            Mode::Patrol => PATROL_SPEED,
         };
-        if nav.index < nav.path.len() {
+        if !pinned && nav.index < nav.path.len() {
             let (tx, ty) = nav.path[nav.index];
             let waypoint = map.tile_to_world(tx, ty);
             let to = horizontal(waypoint - pos);
@@ -181,6 +236,17 @@ pub(super) fn update_adversaries(
     }
 }
 
+/// Interest a guard idles at in the given mode: zero while patrolling, the
+/// alarmed floor while searching. Interest above this means it's actively eyeing
+/// a target (used to pin the cone and halt movement); at or below it the guard
+/// sweeps and moves normally.
+fn resting_interest(mode: Mode) -> f32 {
+    match mode {
+        Mode::Search => SEARCH_INTEREST_FLOOR,
+        _ => 0.0,
+    }
+}
+
 /// Begin chasing toward the current `last_seen` position.
 fn enter_chase(
     map: &LevelMap,
@@ -193,6 +259,42 @@ fn enter_chase(
     if let Some(goal) = map.world_to_tile(awareness.last_seen) {
         repath(map, nav, here, goal);
     }
+}
+
+/// Drop into an alarmed search centred on `last_seen`: hold a baseline of
+/// interest, arm the give-up timer, build the deterministic ring of tiles to
+/// investigate, and head for the first one.
+fn enter_search(
+    map: &LevelMap,
+    awareness: &mut Awareness,
+    nav: &mut Navigation,
+    here: (usize, usize),
+) {
+    awareness.mode = Mode::Search;
+    awareness.interest = SEARCH_INTEREST_FLOOR;
+    awareness.search_timer = SEARCH_DURATION;
+    awareness.search_step = 0;
+    awareness.search_points = match map.world_to_tile(awareness.last_seen) {
+        Some(origin) => search_ring(map, origin, SEARCH_RING_RADIUS),
+        None => Vec::new(),
+    };
+    next_search_goal(map, here, awareness, nav);
+}
+
+/// Path to the next tile in the search ring, advancing the step counter. Wraps
+/// around the ring so a guard keeps investigating until its timer runs out.
+fn next_search_goal(
+    map: &LevelMap,
+    here: (usize, usize),
+    awareness: &mut Awareness,
+    nav: &mut Navigation,
+) {
+    if awareness.search_points.is_empty() {
+        return;
+    }
+    let goal = awareness.search_points[awareness.search_step % awareness.search_points.len()];
+    awareness.search_step += 1;
+    repath(map, nav, here, goal);
 }
 
 /// Choose the next destination for an idle guard, dispatched by which behaviour

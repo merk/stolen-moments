@@ -3,6 +3,7 @@
 #![allow(clippy::type_complexity)]
 
 mod adversary;
+mod billboard;
 mod camera;
 mod catch;
 mod coins;
@@ -46,7 +47,7 @@ fn main() {
             seed::SeedPlugin,
             persistence::PersistencePlugin,
             level::LevelPlugin,
-            camera::IsoCameraPlugin,
+            (camera::IsoCameraPlugin, billboard::BillboardPlugin),
             player::PlayerPlugin,
             props::PropsPlugin,
             coins::CoinsPlugin,

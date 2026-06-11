@@ -21,6 +21,7 @@ components/systems:
 |---|---|---|
 | `level/` | `LevelPlugin` | `LevelMap` (tiles + room tags) + tile↔world helpers, `SpawnPoint`; a `LevelSource` generation pipeline (noise → room stamping → connectivity) and tile rendering |
 | `camera.rs` | `IsoCameraPlugin` | Isometric orthographic camera that follows the player |
+| `billboard.rs` | `BillboardPlugin` | Camera-facing world overlays: the emote-atlas material + per-glyph quads and the shared progress-bar track/fill meshes (`OverlayAssets`), plus the `Billboard` component that keeps an overlay screen-aligned. Guards/player spawn these as child overlays and drive them from their own state |
 | `player.rs` | `PlayerPlugin` | Player spawn + movement |
 | `props.rs` | `PropsPlugin` | Scatters barrels/rocks/chests/coins onto floor tiles |
 | `coins.rs` | `CoinsPlugin` | Coin pickup, `CoinScore`, HUD |
@@ -137,3 +138,8 @@ Models live under `assets/Models/GLB format/` (Kenney mini-dungeon pack).
   translates/rotates it; there's no walk cycle. Its **front faces +Z**, so face
   a movement direction with `looking_to(-move_dir, Vec3::Y)` (Bevy's
   `looking_to` aligns −Z).
+
+The floating overlays (`billboard.rs`) use the **Kenney emotes** pack at
+`assets/kenney_emotes-pack/Spritesheets/pixel_style1.png` (an 80×96 atlas of
+16×16 glyphs; cells per the sibling `.xml`). `build-web.sh` copies this sheet
+explicitly — it lives outside `Models/`.
