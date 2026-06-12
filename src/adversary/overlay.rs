@@ -124,6 +124,11 @@ pub(super) fn update_guard_overlays(
 
 /// The emote a guard shows for its current state, or `None` when calm.
 fn emote_for(awareness: &Awareness, elapsed: f32) -> Option<Emote> {
+    // The pre-chase "spotted you!" beat flashes the alert before the guard moves,
+    // whichever mode the sighting tripped from.
+    if awareness.is_alerting() {
+        return Some(Emote::Exclamation);
+    }
     match awareness.mode {
         Mode::Chase => Some(Emote::Exclamation),
         Mode::Search => Some(searching_dots(elapsed)),

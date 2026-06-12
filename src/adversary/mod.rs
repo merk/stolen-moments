@@ -57,6 +57,9 @@ const SPAWN_CLEARANCE: i32 = 8;
 
 /// How many waypoints a patrolling guard's fixed route cycles through.
 const PATROL_WAYPOINTS: usize = 4;
+/// Keep a patroller's waypoints within this tile radius of its spawn, so it walks
+/// a coherent local beat instead of crisscrossing the whole map.
+const PATROL_RADIUS: i32 = 10;
 
 /// Wander/patrol speed (world units/sec) while unaware.
 const PATROL_SPEED: f32 = 2.6;
@@ -65,16 +68,37 @@ const PATROL_SPEED: f32 = 2.6;
 const CHASE_SPEED: f32 = 4.2;
 /// How quickly the body slerps to face the vision cone's direction.
 const TURN_SPEED: f32 = 8.0;
+/// Easing time (seconds) for the cone's facing — roughly how long it takes to
+/// glide most of the way to a new target direction. A critically-damped
+/// `smooth_turn` accelerates from rest and decelerates into place over this time,
+/// so glances, lock-ons, and lost-target turns feel like a head turning rather
+/// than a cone snapping. Comfortably shorter than the scan step hold so each
+/// cadence glance settles before the next.
+const CONE_SMOOTH_TIME: f32 = 0.28;
 
-/// Peak swing of the cone away from the heading while patrolling (radians).
-const SWEEP_AMPLITUDE: f32 = 0.9;
-/// Angular speed of the sweep oscillation (radians/sec of phase).
-const SWEEP_SPEED: f32 = 1.6;
-
-/// Cone sweep while searching — wider and faster than the patrol sweep, to sweep
+/// Peak swing of the cone away from the heading while scanning at a waypoint
+/// (radians). The guard only sweeps while *stopped*; on the move the cone points
+/// straight along its heading. Widened alongside the narrower cone so the swept
+/// arc still covers comparable ground.
+const SWEEP_AMPLITUDE: f32 = 1.1;
+/// Cone sweep amplitude while searching — wider than the patrol scan, to sweep
 /// more ground hunting for a target that just slipped out of sight.
-const SEARCH_SWEEP_AMPLITUDE: f32 = 1.3;
-const SEARCH_SWEEP_SPEED: f32 = 2.6;
+const SEARCH_SWEEP_AMPLITUDE: f32 = 1.5;
+
+/// The scan look-cadence: discrete offsets (as a fraction of the sweep amplitude)
+/// the cone settles on in turn while dwelling, eased between by `smooth_turn`.
+/// Reads as a deliberate "glance right… settle… glance left… settle" rather than
+/// a metronomic oscillation.
+const SCAN_CADENCE: [f32; 6] = [0.5, 1.0, 0.0, -0.5, -1.0, 0.0];
+/// Seconds the cone holds on each [`SCAN_CADENCE`] step while patrolling.
+const SCAN_STEP_INTERVAL: f32 = 0.9;
+/// Faster cadence step while searching — an agitated, hurried sweep.
+const SEARCH_SCAN_STEP_INTERVAL: f32 = 0.45;
+
+/// Seconds a guard pauses to scan at each patrol/wander waypoint before moving on.
+const DWELL_DURATION: f32 = 2.0;
+/// Shorter pause at each search investigate-tile — more urgent than a patrol.
+const SEARCH_DWELL_DURATION: f32 = 0.8;
 /// Move speed while searching: faster than an unaware patrol, slower than a
 /// committed chase.
 const SEARCH_SPEED: f32 = 3.4;
@@ -97,10 +121,18 @@ const INTEREST_GAIN: f32 = 1.6;
 /// Floor on the distance-scaled gain — a target at the cone's far edge still
 /// raises interest at this fraction of [`INTEREST_GAIN`].
 const INTEREST_MIN_FACTOR: f32 = 0.4;
+/// Floor on the angle-scaled gain — a target at the cone's *side* edge raises
+/// interest at this fraction of a dead-centre sighting, so skirting the
+/// periphery of a guard's view is genuinely safer than walking through it.
+const INTEREST_EDGE_FACTOR: f32 = 0.35;
 /// Interest lost per second while no target is visible.
 const INTEREST_DECAY: f32 = 0.7;
 /// Cap so interest can't bank arbitrarily high before a chase begins.
 const INTEREST_MAX: f32 = 1.25;
+/// Brief "spotted you!" hold once a sighting crosses [`INTEREST_THRESHOLD`]: the
+/// guard locks on and flashes its alert before bursting into the chase, so a
+/// clean break of line of sight within the beat still escapes.
+const ALERT_DELAY: f32 = 0.4;
 
 /// Distance at which a path waypoint counts as reached.
 const WAYPOINT_RADIUS: f32 = 0.15;
@@ -165,13 +197,18 @@ pub struct Adversary;
 /// Where a guard is looking: the swept vision cone.
 #[derive(Component)]
 struct Vision {
-    /// Base facing (normalised, horizontal). While patrolling the cone sweeps
-    /// around this; it tracks the current movement direction.
+    /// Base facing (normalised, horizontal): the guard's movement direction,
+    /// tracked as it walks. The cone points straight along it while travelling
+    /// and sweeps *around* it while stopped to scan.
     heading: Vec3,
-    /// The actual cone-centre direction this frame (heading + sweep, or the
-    /// bearing to the target while chasing). Cached for the gizmo pass.
+    /// The actual cone-centre direction this frame (heading while moving, a
+    /// scan offset while dwelling, or the bearing to the target while chasing),
+    /// eased toward its goal each tick. Cached for the gizmo pass.
     look_dir: Vec3,
-    /// Phase of the patrol sweep oscillation.
+    /// The cone's angular velocity (rad/s), carried across frames so `smooth_turn`
+    /// can accelerate and decelerate the facing rather than turning at a flat rate.
+    look_vel: f32,
+    /// Clock advanced only while scanning, stepping through the look cadence.
     sweep_phase: f32,
 }
 
@@ -200,12 +237,22 @@ pub struct Awareness {
     /// entering a search so the pattern replays identically across loops.
     search_points: Vec<(usize, usize)>,
     search_step: usize,
+    /// Counts down during the pre-chase "spotted you!" beat once a sighting
+    /// crosses the threshold; the chase commits when it reaches zero. Zero
+    /// whenever the guard isn't mid-double-take.
+    alert_timer: f32,
 }
 
 impl Awareness {
     /// True while this guard is locked onto a target and pursuing it.
     pub fn is_chasing(&self) -> bool {
         matches!(self.mode, Mode::Chase)
+    }
+
+    /// True during the pre-chase "spotted you!" beat — locked on, flashing its
+    /// alert, about to commit to a chase.
+    fn is_alerting(&self) -> bool {
+        self.alert_timer > 0.0
     }
 }
 
@@ -217,6 +264,10 @@ struct Navigation {
     index: usize,
     /// Counts down to the next chase re-path.
     repath_timer: f32,
+    /// Counts down while stopped at a waypoint, scanning, before the guard picks
+    /// its next destination. Re-armed each tick while travelling, so it's full
+    /// the moment the guard arrives.
+    dwell_timer: f32,
 }
 
 /// A guard's spawn snapshot: the post it returns to and the facing/sweep it
