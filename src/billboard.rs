@@ -48,6 +48,8 @@ pub enum Emote {
     Dots1,
     Dots2,
     Dots3,
+    /// A lightbulb — marks the vault code, the one idea worth stealing.
+    Idea,
 }
 
 impl Emote {
@@ -59,16 +61,18 @@ impl Emote {
             Emote::Dots1 => (48.0, 48.0),
             Emote::Dots2 => (48.0, 32.0),
             Emote::Dots3 => (48.0, 16.0),
+            Emote::Idea => (16.0, 32.0),
         }
     }
 
     /// Every glyph, for building the mesh table up front.
-    const ALL: [Emote; 5] = [
+    const ALL: [Emote; 6] = [
         Emote::Question,
         Emote::Exclamation,
         Emote::Dots1,
         Emote::Dots2,
         Emote::Dots3,
+        Emote::Idea,
     ];
 }
 

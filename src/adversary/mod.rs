@@ -35,14 +35,17 @@ mod path;
 mod spawn;
 mod vision;
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use rand::rngs::SmallRng;
 
+use crate::level::LevelMap;
 use crate::state::{GameState, WorldGen};
 use behaviour::{reset_adversaries, update_adversaries};
 use cone::draw_vision_cones;
 use overlay::update_guard_overlays;
 use spawn::spawn_adversaries;
+use vision::first_visible;
 
 /// The roster of guards to spawn, by kind. One of each for now; the order also
 /// indexes each guard's seeded RNG stream.
@@ -210,6 +213,27 @@ enum Mode {
 /// all behaviour state lives in the sibling components below.
 #[derive(Component)]
 pub struct Adversary;
+
+/// Read-only view of every guard's sightline, for systems that gate an action on
+/// *not being watched* — the code note can't be lifted, nor the vault opened,
+/// while a guard's cone covers it. Holds only the guard query; the caller passes
+/// the [`LevelMap`] to [`Surveillance::is_watched`] (so a system that also mutates
+/// the map for its own work doesn't clash over a borrowed copy here).
+#[derive(SystemParam)]
+pub struct Surveillance<'w, 's> {
+    guards: Query<'w, 's, (&'static Transform, &'static Vision), With<Adversary>>,
+}
+
+impl Surveillance<'_, '_> {
+    /// True if any guard currently sees `point`: within range, inside the swept
+    /// cone, and with clear line of sight. Uses the same sensing test that drives
+    /// the guards' own awareness, so what blocks an action matches what's drawn.
+    pub fn is_watched(&self, map: &LevelMap, point: Vec3) -> bool {
+        self.guards.iter().any(|(transform, vision)| {
+            first_visible(map, transform.translation, vision.look_dir, &[point]).is_some()
+        })
+    }
+}
 
 /// Where a guard is looking: the swept vision cone.
 #[derive(Component)]

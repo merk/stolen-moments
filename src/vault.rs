@@ -13,6 +13,7 @@
 
 use bevy::prelude::*;
 
+use crate::adversary::Surveillance;
 use crate::level::{LevelMap, RoomKind, Tile};
 use crate::loading::LoadingAssets;
 use crate::persistence::{Fact, PersistPolicy, Persistent};
@@ -96,10 +97,13 @@ fn spawn_vault_door(
 }
 
 /// With the code known, **E** near a closed door opens it: the doorway tile
-/// becomes walkable again and the gate hides.
+/// becomes walkable again and the gate hides. The crack only works unobserved —
+/// a guard whose cone covers the door foils the attempt, so the player must time
+/// it for a gap in the watch.
 fn open_vault(
     keys: Res<ButtonInput<KeyCode>>,
     persistent: Res<Persistent>,
+    surveillance: Surveillance,
     mut map: ResMut<LevelMap>,
     player: Query<&Transform, With<Player>>,
     mut doors: Query<(&mut VaultDoor, &mut Visibility, &Transform)>,
@@ -112,7 +116,10 @@ fn open_vault(
     };
 
     for (mut door, mut visibility, transform) in &mut doors {
-        if door.open || !within_range(player.translation, transform.translation) {
+        if door.open
+            || !within_range(player.translation, transform.translation)
+            || surveillance.is_watched(&map, transform.translation)
+        {
             continue;
         }
         door.open = true;
@@ -140,6 +147,8 @@ fn relock_vault(
 /// how to open it once the code is known, or a nudge to find the code first.
 fn update_prompt(
     persistent: Res<Persistent>,
+    surveillance: Surveillance,
+    map: Res<LevelMap>,
     player: Query<&Transform, With<Player>>,
     doors: Query<(&VaultDoor, &Transform)>,
     mut prompt: Query<(&mut Text, &mut Visibility), With<VaultPromptText>>,
@@ -147,17 +156,19 @@ fn update_prompt(
     let Ok((mut text, mut visibility)) = prompt.single_mut() else {
         return;
     };
-    let near_closed = player.single().ok().is_some_and(|player| {
+    let near = player.single().ok().and_then(|player| {
         doors
             .iter()
-            .any(|(door, t)| !door.open && within_range(player.translation, t.translation))
+            .find(|(door, t)| !door.open && within_range(player.translation, t.translation))
     });
 
-    if near_closed {
-        text.0 = if persistent.knows(Fact::VaultCodeKnown) {
-            "Press E to open vault".into()
-        } else {
+    if let Some((_, door_transform)) = near {
+        text.0 = if !persistent.knows(Fact::VaultCodeKnown) {
             "Vault locked — find the code".into()
+        } else if surveillance.is_watched(&map, door_transform.translation) {
+            "Vault watched — wait for the guard to look away".into()
+        } else {
+            "Press E to open vault".into()
         };
         *visibility = Visibility::Inherited;
     } else {

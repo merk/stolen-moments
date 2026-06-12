@@ -9,12 +9,15 @@
 //! (which persists across loops via [`Persistent`]), letting the player open the
 //! vault on this or any later run.
 
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::scene::SceneInstanceReady;
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
 use rand::seq::SliceRandom;
 
+use crate::adversary::Surveillance;
+use crate::billboard::{Billboard, Emote, OverlayAssets};
 use crate::level::{LevelMap, RoomKind};
 use crate::loading::LoadingAssets;
 use crate::persistence::{Fact, Persistent};
@@ -31,6 +34,12 @@ const WAYPOINT_RADIUS: f32 = 0.12;
 const ROUTE_WAYPOINTS: usize = 3;
 /// Player within this distance (world units) of the note picks it up.
 const NOTE_PICKUP_RADIUS: f32 = 0.7;
+/// Resting height of the code beacon (lightbulb + glow) above the note.
+const BEACON_LIFT: f32 = 1.25;
+/// Vertical bob the beacon rides, and how fast (radians/sec) it cycles — a gentle
+/// float that reads as "pick me up" without being distracting.
+const BEACON_BOB: f32 = 0.12;
+const BEACON_BOB_SPEED: f32 = 2.2;
 /// A teal "uniform" tint so the employee reads apart from the player and ghosts.
 const UNIFORM: Color = Color::srgb(0.18, 0.52, 0.62);
 
@@ -45,6 +54,10 @@ struct Employee {
 /// The vault-code pickup lying on the floor near the employee.
 #[derive(Component)]
 struct CodeNote;
+
+/// The hovering lightbulb billboard above the note; bobbed by [`bob_beacon`].
+#[derive(Component)]
+struct CodeBeacon;
 
 /// Which tile the code note sits on, published for other systems (guards) to
 /// anchor on — a guard posts nearby to watch the code. Present only when a Lobby
@@ -66,7 +79,10 @@ impl Plugin for EmployeePlugin {
             FixedUpdate,
             walk_employee.run_if(in_state(GameState::Playing)),
         )
-        .add_systems(Update, pickup_note.run_if(in_state(GameState::Playing)))
+        .add_systems(
+            Update,
+            (pickup_note, bob_beacon).run_if(in_state(GameState::Playing)),
+        )
         .add_observer(reset_employee)
         .add_observer(reset_note);
     }
@@ -79,6 +95,7 @@ fn spawn_employee(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut loading: ResMut<LoadingAssets>,
+    overlay: Res<OverlayAssets>,
     map: Res<LevelMap>,
     run_seed: Res<RunSeed>,
 ) {
@@ -126,14 +143,40 @@ fn spawn_employee(
         asset_server.load(GltfAssetLabel::Scene(0).from_asset("Models/GLB format/chest.glb")),
     );
     let note_world = start + Vec3::new(0.8, 0.0, 0.0);
-    commands.spawn((
-        SceneRoot(note),
-        Transform::from_translation(note_world),
-        Visibility::Visible,
-        CodeNote,
-        DespawnOnExit(InGame),
-        Name::new("Code note"),
-    ));
+    commands
+        .spawn((
+            SceneRoot(note),
+            Transform::from_translation(note_world),
+            Visibility::Visible,
+            CodeNote,
+            DespawnOnExit(InGame),
+            Name::new("Code note"),
+        ))
+        .with_children(|note| {
+            // A hovering lightbulb billboard marks the note as the prize, with a
+            // warm point light beneath it so the glyph reads as a lit beacon. Both
+            // are children, so they vanish with the note once it's picked up.
+            note.spawn((
+                CodeBeacon,
+                Billboard,
+                Mesh3d(overlay.emote_mesh(Emote::Idea)),
+                MeshMaterial3d(overlay.emote_material.clone()),
+                NotShadowCaster,
+                Transform::from_xyz(0.0, BEACON_LIFT, 0.0),
+                Name::new("Code beacon"),
+            ));
+            note.spawn((
+                PointLight {
+                    color: Color::srgb(1.0, 0.92, 0.6),
+                    intensity: 120_000.0,
+                    range: 6.0,
+                    shadows_enabled: false,
+                    ..default()
+                },
+                Transform::from_xyz(0.0, BEACON_LIFT * 0.8, 0.0),
+                Name::new("Code glow"),
+            ));
+        });
 
     // Publish the note's site so a guard can post up and watch it.
     let tile = map.world_to_tile(note_world).unwrap_or(picks[0]);
@@ -203,9 +246,13 @@ fn reset_employee(_reset: On<LoopReset>, mut employees: Query<(&mut Transform, &
 }
 
 /// Pick up the code note when the player walks over it: learn the (persistent)
-/// vault code and hide the note for the rest of the session.
+/// vault code and hide the note for the rest of the session. A note still under a
+/// guard's gaze can't be lifted — the player has to wait until no cone covers it
+/// (lure the watcher off its post), so the heist's first step is a stealth beat.
 fn pickup_note(
     mut persistent: ResMut<Persistent>,
+    surveillance: Surveillance,
+    map: Res<LevelMap>,
     player: Query<&Transform, With<Player>>,
     mut notes: Query<(&Transform, &mut Visibility), With<CodeNote>>,
 ) {
@@ -221,11 +268,21 @@ fn pickup_note(
             transform.translation.z - player.translation.z,
         );
         if dx * dx + dz * dz <= NOTE_PICKUP_RADIUS * NOTE_PICKUP_RADIUS
+            && !surveillance.is_watched(&map, transform.translation)
             && persistent.learn(Fact::VaultCodeKnown)
         {
             *visibility = Visibility::Hidden;
             info!("Vault code learned!");
         }
+    }
+}
+
+/// Float the code beacon up and down a touch so it reads as a live pickup. Only
+/// the local Y is driven here; `billboard`'s `face_camera` owns the rotation.
+fn bob_beacon(time: Res<Time>, mut beacons: Query<&mut Transform, With<CodeBeacon>>) {
+    let offset = (time.elapsed_secs() * BEACON_BOB_SPEED).sin() * BEACON_BOB;
+    for mut transform in &mut beacons {
+        transform.translation.y = BEACON_LIFT + offset;
     }
 }
 
