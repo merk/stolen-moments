@@ -12,6 +12,7 @@
 //! reads them itself, and the `debug` plugin is the only writer — so this
 //! gameplay module never depends on the debug tooling.
 
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
 use crate::adversary::{Adversary, Awareness};
@@ -44,11 +45,11 @@ pub struct Caught {
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum CatchMode {
     /// Snap to spawn and reset coins, but bank **no** ghost — the run is wasted.
-    #[default]
     Discard,
     /// Treat the catch like a voluntary close: bank the run as a ghost, reset.
     Bank,
     /// End the game: transition to the lose screen.
+    #[default]
     GameOver,
 }
 
@@ -195,6 +196,7 @@ fn attach_grab_bar(
         commands.spawn((
             Mesh3d(assets.bar_track_mesh.clone()),
             MeshMaterial3d(assets.bar_track_material.clone()),
+            NotShadowCaster,
             Transform::from_scale(Vec3::new(BAR_WIDTH, BAR_HEIGHT, 1.0)),
             ChildOf(bar),
         ));
@@ -202,6 +204,7 @@ fn attach_grab_bar(
             GrabFill,
             Mesh3d(assets.bar_fill_mesh.clone()),
             MeshMaterial3d(assets.bar_danger_material.clone()),
+            NotShadowCaster,
             Transform {
                 translation: Vec3::new(-BAR_WIDTH * 0.5, 0.0, 0.01),
                 scale: Vec3::new(0.0, BAR_HEIGHT, 1.0),

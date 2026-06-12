@@ -33,7 +33,7 @@ const MAP_OVERLAY_LIFT: f32 = 0.1;
 /// This plugin's own flags: the overlay panel and the debug-only floorplan it
 /// draws itself. Flags that *gameplay* reads live with the modules that own them
 /// ([`AdversaryGizmos`], [`CatchConfig`]); this plugin writes those, it doesn't
-/// store them. Defaults: overlay panel off, map overlay on.
+/// store them. Defaults: overlay panel on, map overlay on.
 #[derive(Resource)]
 pub struct DebugSettings {
     /// Whether the overlay text panel is shown.
@@ -45,7 +45,7 @@ pub struct DebugSettings {
 impl Default for DebugSettings {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             map_overlay: true,
         }
     }

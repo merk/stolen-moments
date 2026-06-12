@@ -4,6 +4,7 @@
 //! camera-facing billboards (see [`crate::billboard`]) parented to the guard, so
 //! they track it and read clearly without leaning on the cone's colour.
 
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
 use crate::billboard::{BAR_HEIGHT, BAR_WIDTH, Billboard, Emote, OverlayAssets};
@@ -36,6 +37,7 @@ pub(super) fn attach_overlays(commands: &mut Commands, guard: Entity, assets: &O
             Billboard,
             Mesh3d(assets.emote_mesh(Emote::Question)),
             MeshMaterial3d(assets.emote_material.clone()),
+            NotShadowCaster,
             Transform::from_xyz(0.0, EMOTE_LIFT, 0.0),
             Visibility::Hidden,
             ChildOf(guard),
@@ -58,6 +60,7 @@ pub(super) fn attach_overlays(commands: &mut Commands, guard: Entity, assets: &O
     commands.spawn((
         Mesh3d(assets.bar_track_mesh.clone()),
         MeshMaterial3d(assets.bar_track_material.clone()),
+        NotShadowCaster,
         Transform::from_scale(Vec3::new(BAR_WIDTH, BAR_HEIGHT, 1.0)),
         ChildOf(bar),
     ));
@@ -65,6 +68,7 @@ pub(super) fn attach_overlays(commands: &mut Commands, guard: Entity, assets: &O
         .spawn((
             Mesh3d(assets.bar_fill_mesh.clone()),
             MeshMaterial3d(assets.bar_warn_material.clone()),
+            NotShadowCaster,
             // Left edge pinned to the track's left; nudged toward the camera so
             // it sits over the track. X scale is set each frame to the fraction.
             Transform {
