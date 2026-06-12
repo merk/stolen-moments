@@ -27,7 +27,7 @@ use super::vision::horizontal;
 use super::{
     Adversary, Awareness, GUARD_KINDS, GuardKind, Mode, Navigation, PATROL_RADIUS,
     PATROL_WAYPOINTS, PatrolRoute, Post, SPAWN_CLEARANCE, VAULT_PATROL_SPAN, Vision,
-    WATCH_DISTANCE, Wander,
+    WATCH_DISTANCE, Wander, Watch,
 };
 
 // A spawn system reads a fair few resources to place guards against the level's
@@ -150,6 +150,11 @@ pub(super) fn spawn_adversaries(
                 entity.insert(Wander(SmallRng::seed_from_u64(
                     run_seed.derive_indexed("adversary", i),
                 )));
+            }
+            // A guard actually posted on the code note (not the Security
+            // fallback) watches it with a tightened sweep that keeps it in cone.
+            GuardKind::Static if code.is_some() => {
+                entity.insert(Watch);
             }
             GuardKind::Static => {}
         }

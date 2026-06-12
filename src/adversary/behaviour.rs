@@ -18,7 +18,8 @@ use super::{
     INTEREST_THRESHOLD, Mode, Navigation, PATROL_SPEED, PatrolRoute, Post, REPATH_INTERVAL,
     SCAN_CADENCE, SCAN_STEP_INTERVAL, SEARCH_DURATION, SEARCH_DWELL_DURATION,
     SEARCH_INTEREST_FLOOR, SEARCH_RING_RADIUS, SEARCH_SCAN_STEP_INTERVAL, SEARCH_SPEED,
-    SEARCH_SWEEP_AMPLITUDE, SWEEP_AMPLITUDE, TURN_SPEED, Vision, WAYPOINT_RADIUS, Wander,
+    SEARCH_SWEEP_AMPLITUDE, SWEEP_AMPLITUDE, TURN_SPEED, Vision, WATCH_SWEEP_AMPLITUDE,
+    WAYPOINT_RADIUS, Wander, Watch,
 };
 
 /// On a loop restart, send every guard back to its post and restore its full
@@ -74,6 +75,7 @@ pub(super) fn update_adversaries(
             &Post,
             Option<&mut PatrolRoute>,
             Option<&mut Wander>,
+            Option<&Watch>,
         ),
         With<Adversary>,
     >,
@@ -94,13 +96,18 @@ pub(super) fn update_adversaries(
     ranked.sort_by_key(|&(idx, _)| std::cmp::Reverse(idx));
     target_positions.extend(ranked.into_iter().map(|(_, pos)| pos));
 
-    for (mut transform, mut vision, mut awareness, mut nav, post, patrol, wander) in
+    for (mut transform, mut vision, mut awareness, mut nav, post, patrol, wander, watch) in
         &mut adversaries
     {
         let pos = transform.translation;
         let Some(here) = map.world_to_tile(pos) else {
             continue;
         };
+
+        // A static guard (no route, no roam) scans around its fixed post facing
+        // rather than its last travel heading, so it re-aims at its post after a
+        // chase instead of staring off where it walked back from.
+        let is_static = patrol.is_none() && wander.is_none();
 
         // 1. Work out where the cone points this frame. A guard looks straight
         // along its heading while walking, and only sweeps a deliberate look
@@ -109,6 +116,9 @@ pub(super) fn update_adversaries(
         let traveling = nav.index < nav.path.len();
         let (sweep_amp, scan_step) = if awareness.mode == Mode::Search {
             (SEARCH_SWEEP_AMPLITUDE, SEARCH_SCAN_STEP_INTERVAL)
+        } else if watch.is_some() {
+            // A code watcher glances only within the cone so the code stays seen.
+            (WATCH_SWEEP_AMPLITUDE, SCAN_STEP_INTERVAL)
         } else {
             (SWEEP_AMPLITUDE, SCAN_STEP_INTERVAL)
         };
@@ -127,10 +137,17 @@ pub(super) fn update_adversaries(
         } else {
             // Stopped at a waypoint: step the cone through the look cadence,
             // settling on each discrete glance with `smooth_turn` easing between.
+            // Static guards sweep around their fixed post facing; mobile guards
+            // around their current heading.
             vision.sweep_phase += dt;
             let step = (vision.sweep_phase / scan_step) as usize;
             let offset = SCAN_CADENCE[step % SCAN_CADENCE.len()] * sweep_amp;
-            rotate_y(vision.heading, offset)
+            let base = if is_static {
+                post.heading
+            } else {
+                vision.heading
+            };
+            rotate_y(base, offset)
         };
         // Ease the cone toward this frame's target facing, accelerating from rest
         // and decelerating into place, so every cadence glance, lock-on, and

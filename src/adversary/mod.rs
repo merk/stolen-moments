@@ -68,8 +68,14 @@ const PATROL_RADIUS: i32 = 10;
 const VAULT_PATROL_SPAN: i32 = 3;
 
 /// How many tiles a code-watching static guard stands off from the note, so it
-/// surveys the code from a vantage rather than standing on top of it.
-const WATCH_DISTANCE: i32 = 3;
+/// surveys the code from across the room rather than standing on top of it.
+const WATCH_DISTANCE: i32 = 5;
+
+/// Sweep amplitude for a code-watching guard while it scans. Kept under the
+/// cone's [`vision::VISION_HALF_ANGLE`] so that, with the guard aimed straight at
+/// the code, the watched tile never leaves the cone as the head glances side to
+/// side — the player can't sneak to the code while the sweep looks away.
+const WATCH_SWEEP_AMPLITUDE: f32 = vision::VISION_HALF_ANGLE * 0.6;
 
 /// Wander/patrol speed (world units/sec) while unaware.
 const PATROL_SPEED: f32 = 2.6;
@@ -300,6 +306,11 @@ struct PatrolRoute {
 /// A wandering guard's private RNG for picking roam targets (absent on others).
 #[derive(Component)]
 struct Wander(SmallRng);
+
+/// Marks a static guard posted to watch a specific object (the code note): it
+/// scans with a tightened [`WATCH_SWEEP_AMPLITUDE`] so the object stays in cone.
+#[derive(Component)]
+struct Watch;
 
 /// This module's dev-control slice: which guard overlays are drawn. Owned and
 /// read here (by the gizmo systems); the `debug` plugin is the only writer, so
