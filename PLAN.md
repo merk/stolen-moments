@@ -135,7 +135,8 @@ things persist is deliberately left to evolve.
 > **Deferred generalisation:** this flat fact set doesn't *compose* (a designer
 > can't author "the vault key is 2 of 3 components" without code). A data-driven
 > **facts & requirements** system that fixes that — and gives level designers
-> real power from RON alone — is designed in [`FUTURE.md`](./FUTURE.md), with a
+> real power from RON alone — is designed in
+[`docs/future/facts-and-requirements.md`](./docs/future/facts-and-requirements.md), with a
 > clean migration path from this plumbing. Out of scope for now by choice.
 
 ### C. Whole-sim determinism (with a record/replay escape hatch)
