@@ -225,12 +225,16 @@ pub(super) fn update_adversaries(
             }
         }
 
-        // 4. Move, or dwell-and-scan at a waypoint. A guard eyeing a target
-        // (pinned: interest above its mode's baseline, not yet chasing) halts and
-        // stares it down while the cone tracks it. Otherwise it advances along its
-        // path looking ahead; on reaching the end it pauses to scan, and only once
-        // its dwell elapses does it pick the next destination — so patrols read as
-        // walk-stop-look-around rather than an endless shuffle.
+        // 4. Move, or dwell-and-scan at a waypoint. A guard chasing a target it
+        // can see *this frame* steers straight at its true position (line of sight
+        // means that line is wall-free), rather than hopping between tile centres —
+        // grid waypoints make a closing guard jitter between cells and park just
+        // out of grab range, so it homes in directly instead. A guard eyeing a
+        // target (pinned: interest above its mode's baseline, not yet chasing)
+        // halts and stares it down while the cone tracks it. Otherwise it advances
+        // along its grid path looking ahead; on reaching the end it pauses to scan,
+        // and only once its dwell elapses does it pick the next destination — so
+        // patrols read as walk-stop-look-around rather than an endless shuffle.
         let pinned =
             awareness.mode != Mode::Chase && awareness.interest > resting_interest(awareness.mode);
         let speed = match awareness.mode {
@@ -238,7 +242,18 @@ pub(super) fn update_adversaries(
             Mode::Search => SEARCH_SPEED,
             Mode::Patrol => PATROL_SPEED,
         };
-        if !pinned && nav.index < nav.path.len() {
+        if awareness.mode == Mode::Chase && spotted.is_some() {
+            // In sight: drive straight at the live target position. Grid pathing
+            // (below) takes over the moment sight breaks, routing to last-seen.
+            let to = horizontal(awareness.last_seen - pos);
+            let dist = to.length();
+            if dist > 1e-3 {
+                let dir = to / dist;
+                let step = (speed * dt).min(dist);
+                transform.translation = pos + dir * step;
+                vision.heading = dir;
+            }
+        } else if !pinned && nav.index < nav.path.len() {
             // Travelling: keep the dwell re-armed so it's full the moment we stop.
             if awareness.mode != Mode::Chase {
                 nav.dwell_timer = dwell_len(awareness.mode);
