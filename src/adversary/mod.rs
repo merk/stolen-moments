@@ -58,8 +58,18 @@ const SPAWN_CLEARANCE: i32 = 8;
 /// How many waypoints a patrolling guard's fixed route cycles through.
 const PATROL_WAYPOINTS: usize = 4;
 /// Keep a patroller's waypoints within this tile radius of its spawn, so it walks
-/// a coherent local beat instead of crisscrossing the whole map.
+/// a coherent local beat instead of crisscrossing the whole map. Only the
+/// fallback route (no vault to work) uses this; the vault patroller paces the
+/// door frontage instead.
 const PATROL_RADIUS: i32 = 10;
+
+/// How far to either side of the vault door the vault patroller paces, so it
+/// walks back and forth across the front door rather than standing on it.
+const VAULT_PATROL_SPAN: i32 = 3;
+
+/// How many tiles a code-watching static guard stands off from the note, so it
+/// surveys the code from a vantage rather than standing on top of it.
+const WATCH_DISTANCE: i32 = 3;
 
 /// Wander/patrol speed (world units/sec) while unaware.
 const PATROL_SPEED: f32 = 2.6;
@@ -147,10 +157,11 @@ const CONE_LIFT: f32 = 0.08;
 /// running guard's kind is then encoded by those components.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum GuardKind {
-    /// Holds a fixed post, sweeping its cone; only moves once roused to chase,
-    /// returning to the post afterwards.
+    /// Holds a fixed post watching the code note, sweeping its cone; only moves
+    /// once roused to chase, returning to the post afterwards.
     Static,
-    /// Walks a fixed seeded loop of waypoints, sweeping as it goes.
+    /// Paces the vault door's frontage, sweeping as it goes, so someone is always
+    /// walking past the front door.
     Patrolling,
     /// Roams to random reachable tiles (the original behaviour).
     Wandering,

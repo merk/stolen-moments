@@ -46,13 +46,21 @@ struct Employee {
 #[derive(Component)]
 struct CodeNote;
 
+/// Which tile the code note sits on, published for other systems (guards) to
+/// anchor on — a guard posts nearby to watch the code. Present only when a Lobby
+/// (and thus a note) exists; absent for roomless sources.
+#[derive(Resource, Clone, Copy)]
+pub struct CodeNoteSite {
+    pub tile: (usize, usize),
+}
+
 pub struct EmployeePlugin;
 
 impl Plugin for EmployeePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             OnEnter(GameState::Loading),
-            spawn_employee.in_set(WorldGen::Populate),
+            spawn_employee.in_set(WorldGen::Objectives),
         )
         .add_systems(
             FixedUpdate,
@@ -117,14 +125,19 @@ fn spawn_employee(
     let note = loading.track(
         asset_server.load(GltfAssetLabel::Scene(0).from_asset("Models/GLB format/chest.glb")),
     );
+    let note_world = start + Vec3::new(0.8, 0.0, 0.0);
     commands.spawn((
         SceneRoot(note),
-        Transform::from_translation(start + Vec3::new(0.8, 0.0, 0.0)),
+        Transform::from_translation(note_world),
         Visibility::Visible,
         CodeNote,
         DespawnOnExit(InGame),
         Name::new("Code note"),
     ));
+
+    // Publish the note's site so a guard can post up and watch it.
+    let tile = map.world_to_tile(note_world).unwrap_or(picks[0]);
+    commands.insert_resource(CodeNoteSite { tile });
 }
 
 /// Recolour the employee's meshes with the flat uniform tint, so it's clearly

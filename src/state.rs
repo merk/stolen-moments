@@ -52,10 +52,13 @@ impl ComputedStates for InGame {
 }
 
 /// Ordering for the world build on `OnEnter(GameState::Loading)`: terrain first
-/// (it creates `LevelMap`/`SpawnPoint`), then everything that populates it.
+/// (it creates `LevelMap`/`SpawnPoint`), then the objectives that anchor the
+/// level (the code note, publishing its site), then everything that populates it
+/// — guards read those objective sites to post themselves meaningfully.
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WorldGen {
     Terrain,
+    Objectives,
     Populate,
 }
 
@@ -67,7 +70,7 @@ impl Plugin for StatePlugin {
             .add_computed_state::<InGame>()
             .configure_sets(
                 OnEnter(GameState::Loading),
-                (WorldGen::Terrain, WorldGen::Populate).chain(),
+                (WorldGen::Terrain, WorldGen::Objectives, WorldGen::Populate).chain(),
             )
             .add_systems(OnEnter(GameState::Boot), enter_main_menu)
             .add_systems(OnEnter(GameState::MainMenu), spawn_main_menu)
